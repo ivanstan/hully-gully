@@ -510,20 +510,6 @@ export class RenderingEngine {
     this.skirtGroup = this.createSkirt();
     this.windmillGroup.add(this.skirtGroup);
     
-    // Create hub at center (raised to match conical skirt center)
-    const hubGeom = new THREE.CylinderGeometry(1.5, 1.8, 2.0, 16);
-    const hub = new THREE.Mesh(hubGeom, this.materials.mast);
-    hub.position.z = 1.5;  // Raise to match inner skirt height (2.5)
-    hub.castShadow = true;
-    this.windmillGroup.add(hub);
-    
-    // Hub cap
-    const hubCapGeom = new THREE.ConeGeometry(1.5, 0.8, 16);
-    const hubCap = new THREE.Mesh(hubCapGeom, this.materials.chrome);
-    hubCap.position.z = 2.7;
-    hubCap.rotation.x = Math.PI;  // Point cone upward
-    this.windmillGroup.add(hubCap);
-    
     // Create decorative lights on the skirt
     this.createRideLights();
     
@@ -693,28 +679,6 @@ export class RenderingEngine {
       panel.castShadow = true;
       panel.receiveShadow = true;
       skirt.add(panel);
-      
-      // Add radial divider lines on top surface (following the cone slope)
-      const dividerLength = Math.sqrt(
-        Math.pow(outerRadius - innerRadius, 2) + Math.pow(innerHeight - outerHeight, 2)
-      );
-      const dividerGeom = new THREE.CylinderGeometry(0.04, 0.04, dividerLength, 6);
-      const divider = new THREE.Mesh(dividerGeom, this.materials.chrome);
-      
-      // Position at midpoint of the radial line
-      const midRadius = (innerRadius + outerRadius) / 2;
-      const midHeight = (innerHeight + outerHeight) / 2;
-      divider.position.set(
-        Math.cos(angle1) * midRadius,
-        Math.sin(angle1) * midRadius,
-        midHeight
-      );
-      
-      // Rotate to align with the sloped surface
-      const slopeAngle = Math.atan2(innerHeight - outerHeight, outerRadius - innerRadius);
-      divider.rotation.z = angle1 + Math.PI / 2;
-      divider.rotation.x = Math.PI / 2 - slopeAngle;
-      skirt.add(divider);
     }
     
     // Outer trim ring (at the lower edge)
