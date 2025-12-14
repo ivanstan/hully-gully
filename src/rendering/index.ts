@@ -396,8 +396,11 @@ export class RenderingEngine {
     
     // Update or create cabin meshes
     while (this.cabinMeshes.length < state.cabins.length) {
+      const cabinIndex = this.cabinMeshes.length;
       const cabinGeometry = new THREE.BoxGeometry(1.5, 1.5, 2);
-      const cabinMaterial = new THREE.MeshStandardMaterial({ color: 0x00aaff });
+      // Make cabin 0 red for tracking, others blue
+      const cabinColor = cabinIndex === 0 ? 0xff3333 : 0x00aaff;
+      const cabinMaterial = new THREE.MeshStandardMaterial({ color: cabinColor });
       const cabinMesh = new THREE.Mesh(cabinGeometry, cabinMaterial);
       cabinMesh.castShadow = true;
       // Add cabins to scene directly (not to windmill group) for accurate positioning
@@ -414,12 +417,12 @@ export class RenderingEngine {
       // Map physics (x, y, z) to Three.js (x, z, y)
       mesh.position.set(cabin.position.x, cabin.position.z + 1, cabin.position.y);
       
-      // Rotate cabin to face outward (optional, based on position)
-      const angle = Math.atan2(cabin.position.y, cabin.position.x);
-      mesh.rotation.y = angle;
+      // Cabins are fixed - no rotation around their own axis
+      // They maintain a constant orientation in world space
+      mesh.rotation.set(0, 0, 0);
       
-      // Optional: Color by G-force
-      if (this.showGForceColors) {
+      // Optional: Color by G-force (skip for cabin 0 to keep it red for tracking)
+      if (this.showGForceColors && i !== 0) {
         const material = mesh.material as THREE.MeshStandardMaterial;
         const gForce = cabin.gForce;
         // Color mapping: green (low) -> yellow -> red (high)
