@@ -76,6 +76,7 @@ export class RenderingEngine {
   private forceArrows: THREE.ArrowHelper[] = [];
   private showForceVectors: boolean = false;
   private showGForceColors: boolean = false;
+  private lightsEnabled: boolean = true;  // Decorative lights on/off
   
   // UI elements
   private axisHelperCanvas: HTMLCanvasElement | null = null;
@@ -1063,39 +1064,41 @@ export class RenderingEngine {
       this.clearForceVectors();
     }
     
-    // Animate light columns - sequential top to bottom pattern
-    const time = state.time;
-    const animSpeed = 1.2;  // Slower animation speed
-    const cycleDuration = 2.5;  // Longer cycle duration (seconds)
-    
-    for (let col = 0; col < this.lightColumns.length; col++) {
-      const column = this.lightColumns[col];
-      const numBulbs = column.length;
+    // Animate light columns - only when lights are enabled
+    if (this.lightsEnabled) {
+      const time = state.time;
+      const animSpeed = 1.2;  // Slower animation speed
+      const cycleDuration = 2.5;  // Longer cycle duration (seconds)
       
-      // Calculate which bulb should be lit based on time
-      // Creates a cascading effect from top (0) to bottom (numBulbs-1)
-      const cycleProgress = ((time * animSpeed) % cycleDuration) / cycleDuration;  // 0 to 1
-      const activeBulbFloat = cycleProgress * (numBulbs + 1);  // Which bulb is currently "active"
-      
-      for (let row = 0; row < numBulbs; row++) {
-        const bulb = column[row];
-        const material = bulb.material as THREE.MeshStandardMaterial;
+      for (let col = 0; col < this.lightColumns.length; col++) {
+        const column = this.lightColumns[col];
+        const numBulbs = column.length;
         
-        // Calculate distance from the "active" position
-        const distance = Math.abs(row - activeBulbFloat);
+        // Calculate which bulb should be lit based on time
+        // Creates a cascading effect from top (0) to bottom (numBulbs-1)
+        const cycleProgress = ((time * animSpeed) % cycleDuration) / cycleDuration;  // 0 to 1
+        const activeBulbFloat = cycleProgress * (numBulbs + 1);  // Which bulb is currently "active"
         
-        // Bulbs close to active position are bright, others are dim
-        // Creates a traveling "pulse" effect
-        const brightness = Math.max(0, 1 - distance * 0.5);
-        const intensity = 0.3 + brightness * 2.5;  // Range from 0.3 (dim) to 2.8 (bright)
-        
-        material.emissiveIntensity = intensity;
-        
-        // Also adjust color slightly - brighter bulbs are more yellow/white
-        if (brightness > 0.5) {
-          material.emissive.setHex(0xffdd66);  // Bright yellow-white
-        } else {
-          material.emissive.setHex(0xffaa44);  // Warm orange
+        for (let row = 0; row < numBulbs; row++) {
+          const bulb = column[row];
+          const material = bulb.material as THREE.MeshStandardMaterial;
+          
+          // Calculate distance from the "active" position
+          const distance = Math.abs(row - activeBulbFloat);
+          
+          // Bulbs close to active position are bright, others are dim
+          // Creates a traveling "pulse" effect
+          const brightness = Math.max(0, 1 - distance * 0.5);
+          const intensity = 0.3 + brightness * 2.5;  // Range from 0.3 (dim) to 2.8 (bright)
+          
+          material.emissiveIntensity = intensity;
+          
+          // Also adjust color slightly - brighter bulbs are more yellow/white
+          if (brightness > 0.5) {
+            material.emissive.setHex(0xffdd66);  // Bright yellow-white
+          } else {
+            material.emissive.setHex(0xffaa44);  // Warm orange
+          }
         }
       }
     }
@@ -1156,6 +1159,47 @@ export class RenderingEngine {
    */
   toggleGForceColors(): void {
     this.showGForceColors = !this.showGForceColors;
+  }
+  
+  /**
+   * Toggle decorative lights on/off
+   */
+  toggleLights(): void {
+    this.setLightsEnabled(!this.lightsEnabled);
+  }
+  
+  /**
+   * Set lights on/off directly
+   * When off: bulbs remain visible but don't glow, point lights are disabled
+   */
+  setLightsEnabled(enabled: boolean): void {
+    this.lightsEnabled = enabled;
+    
+    // Bulbs stay visible but change appearance
+    for (const bulb of this.lightBulbs) {
+      const material = bulb.material as THREE.MeshStandardMaterial;
+      if (enabled) {
+        // Lights on: restore glowing appearance
+        material.emissiveIntensity = 0.3;  // Will be animated
+        material.color.setHex(0xffeeaa);
+      } else {
+        // Lights off: dim appearance, no glow
+        material.emissiveIntensity = 0;
+        material.color.setHex(0x888888);  // Dull gray
+      }
+    }
+    
+    // Point lights are hidden when off
+    for (const light of this.rideLights) {
+      light.visible = enabled;
+    }
+  }
+  
+  /**
+   * Get lights enabled state
+   */
+  getLightsEnabled(): boolean {
+    return this.lightsEnabled;
   }
   
   /**
