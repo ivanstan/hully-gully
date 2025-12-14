@@ -25,10 +25,15 @@ class BalerinaSimulator {
   
   constructor(container: HTMLElement, controlPanelContainer?: HTMLElement) {
     // Create default simulation configuration
+    // Main platform radius is 2/3 of secondary platform (windmill) radius
+    const windmillRadius = 9; // meters (secondary platform radius)
+    const platformRadius = (2 / 3) * windmillRadius; // meters (main platform radius = 2/3 * windmill)
+    
     const config: SimulationConfig = {
       timeStep: 0.01, // 10ms fixed timestep for physics
       numCabins: 8,
-      platformRadius: 10, // meters
+      platformRadius: platformRadius,
+      windmillRadius: windmillRadius,
       minEccentricRadius: 2, // meters
       maxEccentricRadius: 6, // meters
       ramping: {
@@ -51,7 +56,7 @@ class BalerinaSimulator {
     // Initialize rendering engine
     const width = container.clientWidth || 800;
     const height = container.clientHeight || 600;
-    this.rendering = new RenderingEngine(container, width, height);
+    this.rendering = new RenderingEngine(container, width, height, config.platformRadius, config.windmillRadius);
     
     // Handle window resize
     window.addEventListener('resize', () => {

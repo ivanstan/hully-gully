@@ -318,7 +318,7 @@
                 document.getElementById('status').textContent = 'Running';
                 document.getElementById('time').textContent = state.time.toFixed(2) + ' s';
                 document.getElementById('platform-omega').textContent = state.platform.angularVelocity.toFixed(2) + ' rad/s';
-                document.getElementById('eccentric-omega').textContent = state.eccentric.angularVelocity.toFixed(2) + ' rad/s';
+                document.getElementById('eccentric-omega').textContent = state.windmill.angularVelocity.toFixed(2) + ' rad/s';
                 document.getElementById('eccentric-radius').textContent = state.eccentric.radius.toFixed(2) + ' m';
                 
                 const maxGForce = Math.max(...state.cabins.map(c => c.gForce));

@@ -54,7 +54,7 @@ export class SimulationEngine {
     
     for (let i = 0; i < this.config.numCabins; i++) {
       const cabinAngle = i * angleStep;
-      const cabinDistance = this.config.platformRadius * 0.8; // Place cabins at 80% of platform radius
+      const cabinDistance = this.config.windmillRadius; // Place cabins at the edge of the skirt (windmill radius)
       
       cabins.push({
         platformAngle: cabinAngle,

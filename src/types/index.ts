@@ -155,6 +155,8 @@ export interface SimulationConfig {
   numCabins: number;
   /** Radius of main platform (m) */
   platformRadius: number;
+  /** Radius of windmill/secondary platform (m) */
+  windmillRadius: number;
   /** Minimum eccentric radius (m) */
   minEccentricRadius: number;
   /** Maximum eccentric radius (m) */

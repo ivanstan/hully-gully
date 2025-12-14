@@ -38,6 +38,8 @@ export class RenderingEngine {
   private showGForceColors: boolean = false;
   private axisHelperCanvas: HTMLCanvasElement | null = null;
   private axisHelperContainer: HTMLElement | null = null;
+  private platformRadius: number;
+  private windmillRadius: number;
   
   /**
    * Create a new rendering engine
@@ -45,8 +47,12 @@ export class RenderingEngine {
    * @param container - HTML element to render into
    * @param width - Viewport width (pixels)
    * @param height - Viewport height (pixels)
+   * @param platformRadius - Radius of main platform (m)
+   * @param windmillRadius - Radius of windmill/secondary platform (m)
    */
-  constructor(container: HTMLElement, width: number, height: number) {
+  constructor(container: HTMLElement, width: number, height: number, platformRadius: number, windmillRadius: number) {
+    this.platformRadius = platformRadius;
+    this.windmillRadius = windmillRadius;
     // Scene setup
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x1a1a1a);
@@ -244,7 +250,7 @@ export class RenderingEngine {
    */
   private initializeGeometry(): void {
     // Platform (main rotating disc)
-    const platformGeometry = new THREE.CylinderGeometry(10, 10, 0.5, 32);
+    const platformGeometry = new THREE.CylinderGeometry(this.platformRadius, this.platformRadius, 0.5, 32);
     const platformMaterial = new THREE.MeshStandardMaterial({ color: 0x666666 });
     this.platformMesh = new THREE.Mesh(platformGeometry, platformMaterial);
     this.platformMesh.rotation.y = Math.PI / 2; // Rotate to Z-X plane (vertical)
@@ -263,7 +269,7 @@ export class RenderingEngine {
     this.scene.add(this.windmillGroup);
     
     // Skirt (semi-transparent disc, flat in X-Z plane)
-    const skirtGeometry = new THREE.CircleGeometry(9, 32);
+    const skirtGeometry = new THREE.CircleGeometry(this.windmillRadius, 32);
     const skirtMaterial = new THREE.MeshStandardMaterial({ 
       color: 0xffaa00,
       transparent: true,
