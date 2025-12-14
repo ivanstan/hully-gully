@@ -30,6 +30,8 @@ export class RenderingEngine {
   private controls: OrbitControls;
   private platformMesh: THREE.Mesh | null = null;
   private eccentricMesh: THREE.Mesh | null = null;
+  private windmillGroup: THREE.Group | null = null;
+  private skirtMesh: THREE.Mesh | null = null;
   private cabinMeshes: THREE.Mesh[] = [];
   private forceArrows: THREE.ArrowHelper[] = [];
   private showForceVectors: boolean = false;
@@ -256,7 +258,27 @@ export class RenderingEngine {
     this.eccentricMesh.castShadow = true;
     this.scene.add(this.eccentricMesh);
     
-    // Cabins will be created dynamically based on simulation state
+    // Create windmill group (skirt + cabins) - they rotate together as one system
+    this.windmillGroup = new THREE.Group();
+    this.scene.add(this.windmillGroup);
+    
+    // Skirt (semi-transparent disc, flat in X-Z plane)
+    const skirtGeometry = new THREE.CircleGeometry(9, 32);
+    const skirtMaterial = new THREE.MeshStandardMaterial({ 
+      color: 0xffaa00,
+      transparent: true,
+      opacity: 0.4,
+      side: THREE.DoubleSide
+    });
+    this.skirtMesh = new THREE.Mesh(skirtGeometry, skirtMaterial);
+    // Rotate to X-Z plane: CircleGeometry is in X-Y plane by default, rotate around X axis
+    this.skirtMesh.rotation.x = -Math.PI / 2; // Rotate to X-Z plane (vertical)
+    this.skirtMesh.position.y = 0.6; // Slightly above the main platform
+    this.skirtMesh.receiveShadow = true;
+    this.windmillGroup.add(this.skirtMesh);
+    
+    // Cabins will be created dynamically based on simulation state and added to windmillGroup
+    // Skirt and cabins rotate together around Y-axis as one system
   }
   
   /**
@@ -285,27 +307,60 @@ export class RenderingEngine {
       this.eccentricMesh.rotation.y = state.platformPhase;
     }
     
+    // Update windmill group position and rotation
+    // Skirt and cabins rotate together as one system around Y-axis
+    if (this.windmillGroup) {
+      // Position windmill group at eccentric center
+      // Map physics (x, y) to Three.js (z, x) for Z-X plane
+      const eccX_physics = state.eccentric.radius * Math.cos(state.eccentricPhase);
+      const eccY_physics = state.eccentric.radius * Math.sin(state.eccentricPhase);
+      this.windmillGroup.position.set(eccY_physics, 0, eccX_physics);
+      
+      // Rotate windmill group (skirt + cabins) around Y-axis with platform
+      // This makes the skirt and cabins rotate together as one system
+      this.windmillGroup.rotation.y = state.platformPhase;
+    }
+    
     // Update or create cabin meshes
     while (this.cabinMeshes.length < state.cabins.length) {
       const cabinGeometry = new THREE.BoxGeometry(1.5, 1.5, 2);
       const cabinMaterial = new THREE.MeshStandardMaterial({ color: 0x00aaff });
       const cabinMesh = new THREE.Mesh(cabinGeometry, cabinMaterial);
       cabinMesh.castShadow = true;
-      this.scene.add(cabinMesh);
+      // Add to windmill group instead of scene
+      if (this.windmillGroup) {
+        this.windmillGroup.add(cabinMesh);
+      } else {
+        this.scene.add(cabinMesh);
+      }
       this.cabinMeshes.push(cabinMesh);
     }
     
     // Update cabin positions and colors
+    // Note: Cabins are now in windmill group, so positions are relative to group center
     for (let i = 0; i < state.cabins.length; i++) {
       const cabin = state.cabins[i];
       const mesh = this.cabinMeshes[i];
       
-      // Set position from simulation state
-      // Map physics (x, y, z) to Three.js (y, z, x) for Z-X plane disc
-      mesh.position.set(cabin.position.y, cabin.position.z + 1, cabin.position.x);
+      // Calculate cabin position in platform frame relative to platform center
+      // From physics: cabinX = eccCenterX + cabinDistance * cos(cabinAngle)
+      //               cabinY = eccCenterY + cabinDistance * sin(cabinAngle)
+      const eccX_physics = state.eccentric.radius * Math.cos(state.eccentricPhase);
+      const eccY_physics = state.eccentric.radius * Math.sin(state.eccentricPhase);
       
-      // Rotate with platform around Y-axis
-      mesh.rotation.y = state.platformPhase;
+      const cabinX_plat = eccX_physics + cabin.distanceFromCenter * Math.cos(cabin.platformAngle);
+      const cabinY_plat = eccY_physics + cabin.distanceFromCenter * Math.sin(cabin.platformAngle);
+      
+      // Position relative to eccentric center (in platform frame)
+      const relX = cabinX_plat - eccX_physics;
+      const relY = cabinY_plat - eccY_physics;
+      
+      // Set position relative to windmill group center
+      // Map physics (x, y, z) to Three.js (y, z, x) for Z-X plane disc
+      mesh.position.set(relY, cabin.position.z + 1, relX);
+      
+      // Cabins rotate with windmill group, so no individual rotation needed
+      mesh.rotation.y = 0;
       
       // Optional: Color by G-force
       if (this.showGForceColors) {
