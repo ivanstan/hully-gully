@@ -17,6 +17,7 @@
 
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
@@ -41,6 +42,10 @@ interface MaterialSet {
   pivot: THREE.MeshStandardMaterial;
   ground: THREE.MeshStandardMaterial;
   chrome: THREE.MeshStandardMaterial;
+  // Ballerina doll materials
+  dollDress: THREE.MeshStandardMaterial;
+  dollSkin: THREE.MeshStandardMaterial;
+  dollHair: THREE.MeshStandardMaterial;
 }
 
 /**
@@ -67,6 +72,8 @@ export class RenderingEngine {
   private rideLights: THREE.PointLight[] = [];
   private lightBulbs: THREE.Mesh[] = [];
   private lightColumns: THREE.Mesh[][] = [];  // 2D array: [column][bulb from top to bottom]
+  private balerinaDollGroup: THREE.Group | null = null;  // Container for ballerina doll (loaded or fallback)
+  private gltfLoader: GLTFLoader;
   
   // Legacy compatibility
   private platformMesh: THREE.Mesh | null = null;
@@ -93,6 +100,9 @@ export class RenderingEngine {
   constructor(container: HTMLElement, width: number, height: number, platformRadius: number, windmillRadius: number) {
     this.platformRadius = platformRadius;
     this.windmillRadius = windmillRadius;
+    
+    // Initialize GLTF loader for 3D models
+    this.gltfLoader = new GLTFLoader();
     
     // Scene setup
     this.scene = new THREE.Scene();
@@ -231,6 +241,22 @@ export class RenderingEngine {
         color: 0xffffff,
         metalness: 1.0,
         roughness: 0.05,
+      }),
+      // Ballerina doll materials
+      dollDress: new THREE.MeshStandardMaterial({
+        color: 0xff69b4,  // Hot pink dress
+        metalness: 0.1,
+        roughness: 0.6,
+      }),
+      dollSkin: new THREE.MeshStandardMaterial({
+        color: 0xffd5b4,  // Skin tone
+        metalness: 0.0,
+        roughness: 0.8,
+      }),
+      dollHair: new THREE.MeshStandardMaterial({
+        color: 0x2a1a0a,  // Dark brown hair
+        metalness: 0.1,
+        roughness: 0.7,
       }),
     };
   }
@@ -503,10 +529,14 @@ export class RenderingEngine {
   }
   
   /**
-   * Create the windmill group (skirt + cabins + arms)
+   * Create the windmill group (skirt + cabins + arms + ballerina doll)
    */
   private createWindmillGroup(): void {
     this.windmillGroup = new THREE.Group();
+    
+    // Create ballerina doll at the center (above the skirt)
+    const balerinaDoll = this.createBalerinaDoll();
+    this.windmillGroup.add(balerinaDoll);
     
     // Create decorative skirt
     this.skirtGroup = this.createSkirt();
@@ -519,6 +549,258 @@ export class RenderingEngine {
     this.createSeatsOnRim();
     
     this.scene.add(this.windmillGroup);
+  }
+  
+  /**
+   * Create the ballerina doll figure in the center of the ride
+   * Attempts to load a GLTF model, falls back to geometric primitives if not found
+   */
+  private createBalerinaDoll(): THREE.Group {
+    const doll = new THREE.Group();
+    this.balerinaDollGroup = doll;
+    
+    // Skirt parameters (matching the skirt geometry)
+    const innerHeight = 2.5;  // Height at inner edge of skirt
+    const innerRadius = 1.8;
+    
+    // Try to load a GLTF model
+    this.loadBalerinaDollModel(doll, innerHeight, innerRadius);
+    
+    // Add the dress hem transition (always geometric, connects doll to skirt)
+    // This disc should lie flat in the Z-X plane (circular face pointing up along Z)
+    const hemGeom = new THREE.CylinderGeometry(
+      0.72,          // top (matches expected doll waist)
+      innerRadius,   // bottom (matches skirt inner radius)
+      0.5,           // height
+      24
+    );
+    const hem = new THREE.Mesh(hemGeom, this.materials.dollDress);
+    hem.rotation.x = Math.PI / 2;  // Rotate so cylinder axis points along Z (disc in Z-X plane)
+    hem.position.z = innerHeight + 0.1;
+    hem.castShadow = true;
+    doll.add(hem);
+    
+    return doll;
+  }
+  
+  /**
+   * Load ballerina doll 3D model from GLTF file
+   * Falls back to geometric primitives if model not found
+   */
+  private loadBalerinaDollModel(doll: THREE.Group, innerHeight: number, innerRadius: number): void {
+    // Load the Sketchfab model (scene.gltf + scene.bin + textures)
+    const modelPath = '/models/scene.gltf';
+    
+    this.gltfLoader.load(
+      modelPath,
+      (gltf) => {
+        try {
+          console.log('Ballerina model loaded successfully');
+          const model = gltf.scene;
+          
+          // Scale and position the model
+          // Adjust these values based on the actual model dimensions
+          // The model's Y-axis becomes Z in the windmill's local coords
+          model.scale.set(2.5, 2.5, 2.5);  // Larger scale for visibility
+          model.position.z = innerHeight + 0.5;  // Position above the skirt
+          
+          // Rotate to stand upright
+          // GLTF models are Y-up, windmill group is Z-up
+          // Rotate +90 degrees around X to make the model's Y-up become Z-up
+          model.rotation.x = Math.PI / 2;  // Stand up (head points to +Z)
+          model.rotation.y = 0;
+          model.rotation.z = 0;
+          
+          // Apply fallback materials if textures failed to load
+          // and enable shadows on all meshes
+          model.traverse((child) => {
+            if (child instanceof THREE.Mesh) {
+              child.castShadow = true;
+              child.receiveShadow = true;
+              
+              // Check if material has missing textures and apply fallback
+              if (child.material) {
+                const mat = child.material as THREE.MeshStandardMaterial;
+                // If material has no valid map or looks broken, apply a nice skin/dress material
+                if (mat.map === null || mat.map === undefined) {
+                  // Determine material type based on mesh name or position
+                  const meshName = child.name.toLowerCase();
+                  if (meshName.includes('hair') || meshName.includes('head')) {
+                    child.material = this.materials.dollHair.clone();
+                  } else if (meshName.includes('dress') || meshName.includes('cloth') || meshName.includes('body')) {
+                    child.material = this.materials.dollDress.clone();
+                  } else {
+                    // Default to skin material
+                    child.material = this.materials.dollSkin.clone();
+                  }
+                }
+              }
+            }
+          });
+          
+          doll.add(model);
+        } catch (e) {
+          console.warn('Error processing ballerina model, using fallback:', e);
+          this.createFallbackBalerinaDoll(doll, innerHeight, innerRadius);
+        }
+      },
+      (progress) => {
+        // Loading progress
+        if (progress.total > 0) {
+          console.log(`Loading ballerina model: ${(progress.loaded / progress.total * 100).toFixed(1)}%`);
+        }
+      },
+      (error) => {
+        console.warn('Ballerina model not found, using fallback geometric doll:', error);
+        this.createFallbackBalerinaDoll(doll, innerHeight, innerRadius);
+      }
+    );
+  }
+  
+  /**
+   * Create fallback geometric ballerina doll when GLTF model is not available
+   */
+  private createFallbackBalerinaDoll(doll: THREE.Group, innerHeight: number, innerRadius: number): void {
+    const dollScale = 1.2;
+    
+    // ===== TORSO / BODICE =====
+    const bodiceGeom = new THREE.CylinderGeometry(
+      0.4 * dollScale,   // top radius (shoulders)
+      0.6 * dollScale,   // bottom radius (waist)
+      1.5 * dollScale,   // height
+      16
+    );
+    const bodice = new THREE.Mesh(bodiceGeom, this.materials.dollDress);
+    bodice.position.z = innerHeight + 0.75 * dollScale;
+    bodice.castShadow = true;
+    doll.add(bodice);
+    
+    // Dress collar
+    const collarGeom = new THREE.TorusGeometry(0.35 * dollScale, 0.08 * dollScale, 8, 16);
+    const collar = new THREE.Mesh(collarGeom, this.materials.dollDress);
+    collar.position.z = innerHeight + 1.4 * dollScale;
+    doll.add(collar);
+    
+    // ===== PUFFED SLEEVES =====
+    const sleeveGeom = new THREE.SphereGeometry(0.35 * dollScale, 12, 12);
+    const leftSleeve = new THREE.Mesh(sleeveGeom, this.materials.dollDress);
+    leftSleeve.position.set(-0.55 * dollScale, 0, innerHeight + 1.2 * dollScale);
+    leftSleeve.scale.set(1, 0.7, 0.9);
+    leftSleeve.castShadow = true;
+    doll.add(leftSleeve);
+    
+    const rightSleeve = new THREE.Mesh(sleeveGeom, this.materials.dollDress);
+    rightSleeve.position.set(0.55 * dollScale, 0, innerHeight + 1.2 * dollScale);
+    rightSleeve.scale.set(1, 0.7, 0.9);
+    rightSleeve.castShadow = true;
+    doll.add(rightSleeve);
+    
+    // ===== ARMS (raised at sides) =====
+    const armGeom = new THREE.CylinderGeometry(0.08 * dollScale, 0.1 * dollScale, 1.2 * dollScale, 8);
+    
+    // Left arm - raised outward and slightly up
+    const leftArm = new THREE.Mesh(armGeom, this.materials.dollSkin);
+    leftArm.position.set(-1.1 * dollScale, 0, innerHeight + 1.2 * dollScale);
+    leftArm.rotation.y = Math.PI / 2;
+    leftArm.rotation.x = -Math.PI / 8;  // Raised slightly
+    leftArm.castShadow = true;
+    doll.add(leftArm);
+    
+    // Right arm
+    const rightArm = new THREE.Mesh(armGeom, this.materials.dollSkin);
+    rightArm.position.set(1.1 * dollScale, 0, innerHeight + 1.2 * dollScale);
+    rightArm.rotation.y = -Math.PI / 2;
+    rightArm.rotation.x = -Math.PI / 8;
+    rightArm.castShadow = true;
+    doll.add(rightArm);
+    
+    // Hands
+    const handGeom = new THREE.SphereGeometry(0.1 * dollScale, 8, 8);
+    const leftHand = new THREE.Mesh(handGeom, this.materials.dollSkin);
+    leftHand.position.set(-1.7 * dollScale, 0.2 * dollScale, innerHeight + 1.3 * dollScale);
+    doll.add(leftHand);
+    
+    const rightHand = new THREE.Mesh(handGeom, this.materials.dollSkin);
+    rightHand.position.set(1.7 * dollScale, 0.2 * dollScale, innerHeight + 1.3 * dollScale);
+    doll.add(rightHand);
+    
+    // ===== NECK =====
+    const neckGeom = new THREE.CylinderGeometry(0.15 * dollScale, 0.2 * dollScale, 0.3 * dollScale, 12);
+    const neck = new THREE.Mesh(neckGeom, this.materials.dollSkin);
+    neck.position.z = innerHeight + 1.6 * dollScale;
+    doll.add(neck);
+    
+    // ===== HEAD =====
+    const headGeom = new THREE.SphereGeometry(0.4 * dollScale, 16, 16);
+    const head = new THREE.Mesh(headGeom, this.materials.dollSkin);
+    head.position.z = innerHeight + 2.1 * dollScale;
+    head.castShadow = true;
+    doll.add(head);
+    
+    // ===== SHORT BLACK HAIR =====
+    // Short hair cap style (as requested)
+    const hairGeom = new THREE.SphereGeometry(0.43 * dollScale, 16, 16, 0, Math.PI * 2, 0, Math.PI * 0.55);
+    const hairMat = new THREE.MeshStandardMaterial({ 
+      color: 0x0a0a0a,  // Black hair
+      metalness: 0.3, 
+      roughness: 0.6 
+    });
+    const hair = new THREE.Mesh(hairGeom, hairMat);
+    hair.position.z = innerHeight + 2.2 * dollScale;
+    hair.rotation.x = Math.PI;
+    doll.add(hair);
+    
+    // Side hair pieces for short bob look
+    const sideHairGeom = new THREE.SphereGeometry(0.15 * dollScale, 8, 8);
+    const leftSideHair = new THREE.Mesh(sideHairGeom, hairMat);
+    leftSideHair.position.set(-0.35 * dollScale, 0.1 * dollScale, innerHeight + 2.0 * dollScale);
+    leftSideHair.scale.set(0.6, 1, 1.2);
+    doll.add(leftSideHair);
+    
+    const rightSideHair = new THREE.Mesh(sideHairGeom, hairMat);
+    rightSideHair.position.set(0.35 * dollScale, 0.1 * dollScale, innerHeight + 2.0 * dollScale);
+    rightSideHair.scale.set(0.6, 1, 1.2);
+    doll.add(rightSideHair);
+    
+    // ===== FACE FEATURES =====
+    const eyeGeom = new THREE.SphereGeometry(0.06 * dollScale, 8, 8);
+    const eyeMat = new THREE.MeshStandardMaterial({ color: 0x222222 });
+    
+    const leftEye = new THREE.Mesh(eyeGeom, eyeMat);
+    leftEye.position.set(-0.14 * dollScale, 0.36 * dollScale, innerHeight + 2.15 * dollScale);
+    doll.add(leftEye);
+    
+    const rightEye = new THREE.Mesh(eyeGeom, eyeMat);
+    rightEye.position.set(0.14 * dollScale, 0.36 * dollScale, innerHeight + 2.15 * dollScale);
+    doll.add(rightEye);
+    
+    // Eyebrows
+    const browGeom = new THREE.BoxGeometry(0.12 * dollScale, 0.02 * dollScale, 0.02 * dollScale);
+    const browMat = new THREE.MeshStandardMaterial({ color: 0x0a0a0a });
+    
+    const leftBrow = new THREE.Mesh(browGeom, browMat);
+    leftBrow.position.set(-0.14 * dollScale, 0.38 * dollScale, innerHeight + 2.25 * dollScale);
+    doll.add(leftBrow);
+    
+    const rightBrow = new THREE.Mesh(browGeom, browMat);
+    rightBrow.position.set(0.14 * dollScale, 0.38 * dollScale, innerHeight + 2.25 * dollScale);
+    doll.add(rightBrow);
+    
+    // Lips
+    const lipGeom = new THREE.SphereGeometry(0.06 * dollScale, 8, 8);
+    const lipMat = new THREE.MeshStandardMaterial({ color: 0xcc4444 });
+    const lips = new THREE.Mesh(lipGeom, lipMat);
+    lips.position.set(0, 0.37 * dollScale, innerHeight + 1.95 * dollScale);
+    lips.scale.set(1.5, 0.5, 0.5);
+    doll.add(lips);
+    
+    // Nose (subtle)
+    const noseGeom = new THREE.ConeGeometry(0.04 * dollScale, 0.1 * dollScale, 6);
+    const noseMat = new THREE.MeshStandardMaterial({ color: 0xeec5a8 });
+    const nose = new THREE.Mesh(noseGeom, noseMat);
+    nose.position.set(0, 0.4 * dollScale, innerHeight + 2.05 * dollScale);
+    nose.rotation.x = -Math.PI / 2;
+    doll.add(nose);
   }
   
   /**

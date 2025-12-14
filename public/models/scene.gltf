@@ -1,0 +1,477 @@
+{
+  "accessors": [
+    {
+      "bufferView": 2,
+      "componentType": 5126,
+      "count": 65534,
+      "max": [
+        0.1160430759191513,
+        0.19099220633506775,
+        -1.5450085401535034
+      ],
+      "min": [
+        -0.10131706297397614,
+        -0.05352136492729187,
+        -1.7412352561950684
+      ],
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 2,
+      "byteOffset": 786408,
+      "componentType": 5126,
+      "count": 65534,
+      "max": [
+        0.9997316002845764,
+        0.9999803304672241,
+        0.9999919533729553
+      ],
+      "min": [
+        -0.9996768236160278,
+        -0.9998301863670349,
+        -0.9997459650039673
+      ],
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 3,
+      "componentType": 5126,
+      "count": 65534,
+      "max": [
+        0.9999077320098877,
+        0.9993187785148621,
+        0.9997798204421997,
+        1.0
+      ],
+      "min": [
+        -0.9999086856842041,
+        -0.9958488345146179,
+        -0.9997835159301758,
+        -1.0
+      ],
+      "type": "VEC4"
+    },
+    {
+      "bufferView": 1,
+      "componentType": 5126,
+      "count": 65534,
+      "max": [
+        1.0000001192092896,
+        1.0000001192092896
+      ],
+      "min": [
+        0.0,
+        0.0
+      ],
+      "type": "VEC2"
+    },
+    {
+      "bufferView": 0,
+      "componentType": 5125,
+      "count": 101712,
+      "type": "SCALAR"
+    },
+    {
+      "bufferView": 2,
+      "byteOffset": 1572816,
+      "componentType": 5126,
+      "count": 42174,
+      "max": [
+        0.46434110403060913,
+        0.22064343094825745,
+        0.09337115287780762
+      ],
+      "min": [
+        -0.46434110403060913,
+        -0.05409907549619675,
+        -1.7414318323135376
+      ],
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 2,
+      "byteOffset": 2078904,
+      "componentType": 5126,
+      "count": 42174,
+      "max": [
+        0.9999786019325256,
+        0.9999997615814209,
+        0.9999919533729553
+      ],
+      "min": [
+        -0.9999786615371704,
+        -0.9999895691871643,
+        -0.9999891519546509
+      ],
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 3,
+      "byteOffset": 1048544,
+      "componentType": 5126,
+      "count": 42174,
+      "max": [
+        1.0,
+        0.999991774559021,
+        0.9999590516090393,
+        1.0
+      ],
+      "min": [
+        -0.9999727606773376,
+        -0.9999916553497314,
+        -0.9999233484268188,
+        -1.0
+      ],
+      "type": "VEC4"
+    },
+    {
+      "bufferView": 1,
+      "byteOffset": 524272,
+      "componentType": 5126,
+      "count": 42174,
+      "max": [
+        0.9855849146842957,
+        0.9997216463088989
+      ],
+      "min": [
+        0.00027823448181152344,
+        0.00027833878993988037
+      ],
+      "type": "VEC2"
+    },
+    {
+      "bufferView": 0,
+      "byteOffset": 406848,
+      "componentType": 5125,
+      "count": 207516,
+      "type": "SCALAR"
+    },
+    {
+      "bufferView": 2,
+      "byteOffset": 2584992,
+      "componentType": 5126,
+      "count": 5340,
+      "max": [
+        0.02015874534845352,
+        0.02036997675895691,
+        0.020158736035227776
+      ],
+      "min": [
+        -0.08742687106132507,
+        -0.021631520241498947,
+        -0.020158741623163223
+      ],
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 2,
+      "byteOffset": 2649072,
+      "componentType": 5126,
+      "count": 5340,
+      "max": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "min": [
+        -1.0,
+        -0.9999956488609314,
+        -1.0
+      ],
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 1,
+      "byteOffset": 861664,
+      "componentType": 5126,
+      "count": 5340,
+      "max": [
+        1.0000001192092896,
+        1.0000001192092896
+      ],
+      "min": [
+        0.0,
+        0.0
+      ],
+      "type": "VEC2"
+    },
+    {
+      "bufferView": 0,
+      "byteOffset": 1236912,
+      "componentType": 5125,
+      "count": 26880,
+      "type": "SCALAR"
+    }
+  ],
+  "asset": {
+    "extras": {
+      "author": "ijiklvn (https://sketchfab.com/kelvin-carvalho)",
+      "license": "CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)",
+      "source": "https://sketchfab.com/3d-models/stylized-female-base-mesh-ed45a59e679243be925ba34824d3b45f",
+      "title": "Stylized Female Base Mesh"
+    },
+    "generator": "Sketchfab-14.47.0",
+    "version": "2.0"
+  },
+  "bufferViews": [
+    {
+      "buffer": 0,
+      "byteLength": 1344432,
+      "name": "floatBufferViews",
+      "target": 34963
+    },
+    {
+      "buffer": 0,
+      "byteLength": 904384,
+      "byteOffset": 1344432,
+      "byteStride": 8,
+      "name": "floatBufferViews",
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 2713152,
+      "byteOffset": 2248816,
+      "byteStride": 12,
+      "name": "floatBufferViews",
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 1723328,
+      "byteOffset": 4961968,
+      "byteStride": 16,
+      "name": "floatBufferViews",
+      "target": 34962
+    }
+  ],
+  "buffers": [
+    {
+      "byteLength": 6685296,
+      "uri": "scene.bin"
+    }
+  ],
+  "images": [
+    {
+      "uri": "textures/SKIN_normal.png"
+    }
+  ],
+  "materials": [
+    {
+      "doubleSided": true,
+      "name": "eye__0",
+      "pbrMetallicRoughness": {
+        "metallicFactor": 0.0,
+        "roughnessFactor": 0.6
+      }
+    },
+    {
+      "doubleSided": true,
+      "name": "SKIN",
+      "normalTexture": {
+        "index": 0,
+        "scale": 0.5104777462178932
+      },
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.3417455923947124,
+          0.17972217008772778,
+          0.11108983261075236,
+          1.0
+        ],
+        "metallicFactor": 0.0,
+        "roughnessFactor": 0.565335056259219
+      }
+    }
+  ],
+  "meshes": [
+    {
+      "name": "RETOPO.002_SKIN_0",
+      "primitives": [
+        {
+          "attributes": {
+            "NORMAL": 1,
+            "POSITION": 0,
+            "TANGENT": 2,
+            "TEXCOORD_0": 3
+          },
+          "indices": 4,
+          "material": 1,
+          "mode": 4
+        }
+      ]
+    },
+    {
+      "name": "RETOPO.002_SKIN_0",
+      "primitives": [
+        {
+          "attributes": {
+            "NORMAL": 6,
+            "POSITION": 5,
+            "TANGENT": 7,
+            "TEXCOORD_0": 8
+          },
+          "indices": 9,
+          "material": 1,
+          "mode": 4
+        }
+      ]
+    },
+    {
+      "name": "eye__0",
+      "primitives": [
+        {
+          "attributes": {
+            "NORMAL": 11,
+            "POSITION": 10,
+            "TEXCOORD_0": 12
+          },
+          "indices": 13,
+          "material": 0,
+          "mode": 4
+        }
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "children": [
+        1
+      ],
+      "matrix": [
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        2.220446049250313e-16,
+        -1.0,
+        0.0,
+        0.0,
+        1.0,
+        2.220446049250313e-16,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "name": "Sketchfab_model"
+    },
+    {
+      "children": [
+        2
+      ],
+      "matrix": [
+        0.009999999776482582,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.009999999776482582,
+        0.0,
+        0.0,
+        -0.009999999776482582,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "name": "7a619b803300440ba984e0b41c2d23f5.fbx"
+    },
+    {
+      "children": [
+        3,
+        6
+      ],
+      "name": "RootNode"
+    },
+    {
+      "children": [
+        4,
+        5
+      ],
+      "matrix": [
+        100.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        -1.629206793918314e-05,
+        -99.99999999999868,
+        0.0,
+        0.0,
+        99.99999999999868,
+        -1.629206793918314e-05,
+        0.0,
+        4.284083843231201e-05,
+        168.1707000732422,
+        8.226136207580566,
+        1.0
+      ],
+      "name": "RETOPO.002"
+    },
+    {
+      "mesh": 0,
+      "name": "RETOPO.002_SKIN_0"
+    },
+    {
+      "mesh": 1,
+      "name": "RETOPO.002_SKIN_0"
+    },
+    {
+      "children": [
+        7
+      ],
+      "matrix": [
+        100.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        -1.629206793918314e-05,
+        -99.99999999999868,
+        0.0,
+        0.0,
+        99.99999999999868,
+        -1.629206793918314e-05,
+        0.0,
+        3.363406181335449,
+        165.8331756591797,
+        4.730410099029541,
+        1.0
+      ],
+      "name": "eye"
+    },
+    {
+      "mesh": 2,
+      "name": "eye__0"
+    }
+  ],
+  "samplers": [
+    {
+      "magFilter": 9729,
+      "minFilter": 9987,
+      "wrapS": 10497,
+      "wrapT": 10497
+    }
+  ],
+  "scene": 0,
+  "scenes": [
+    {
+      "name": "Sketchfab_Scene",
+      "nodes": [
+        0
+      ]
+    }
+  ],
+  "textures": [
+    {
+      "sampler": 0,
+      "source": 0
+    }
+  ]
+}
