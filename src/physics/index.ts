@@ -5,10 +5,16 @@
  * No hidden physics engines - all math is visible and documented.
  * 
  * The motion is a superposition of:
- * 1. Main platform rotation around vertical axis
- * 2. Eccentric center at variable radius (rotates with platform, no independent rotation)
- * 3. Windmill (secondary platform: skirt + cabins) rotation around eccentric center
- * 4. Cabins fixed to windmill at specific positions
+ * 1. Main platform rotation around vertical axis (Y-axis in world frame)
+ * 2. Pivot point at edge of primary platform (point of tangency)
+ * 3. Secondary platform tilts about the pivot axis (tangent to platform edge)
+ * 4. Windmill (secondary platform: skirt + cabins) rotates around its center
+ * 5. Cabins fixed to windmill at specific positions
+ * 
+ * Coordinate system:
+ * - World frame: X-Z is horizontal plane, Y is vertical (up)
+ * - Platform frame: rotates with main platform
+ * - Tilted frame: rotates with main platform and tilts about pivot axis
  * 
  * All calculations use SI units and are deterministic.
  */
@@ -16,46 +22,155 @@
 import { Vector2D, Vector3D, CabinState, SimulationState } from '../types/index.js';
 
 /**
- * Compute the position of a cabin in world coordinates
+ * Compute the position of a cabin in world coordinates with tilt
  * 
- * Equations:
- * - Platform center rotates: (0, 0) in platform frame
- * - Eccentric center: (r_ecc, 0) in platform frame (fixed angle, rotates with platform)
- * - Windmill rotates around eccentric center: cabin positions rotate by windmillPhase
- * - Cabin position: eccentric_center + rotated_cabin_offset in platform frame
- * - Transform to world: rotate by platform angle θ_plat
+ * Geometry:
+ * 1. Pivot point P is at distance pivotRadius from platform center, at angle 0 in platform frame
+ * 2. Pivot axis is perpendicular to radial direction (tangent, along Y direction in platform frame)
+ * 3. Secondary platform center S is at distance secondaryPlatformOffset from pivot point,
+ *    in the direction perpendicular to pivot axis, tilted by tiltAngle from horizontal
+ * 4. Cabin positions are on the secondary platform at cabinDistance from S center
+ * 5. Everything rotates with platform (platformPhase)
+ * 6. Cabins also rotate around S center (windmillPhase)
  * 
  * @param cabinAngle - Angle of cabin on windmill (rad) - fixed relative to windmill
- * @param cabinDistance - Distance from eccentric center (m)
+ * @param cabinDistance - Distance from secondary platform center (m)
  * @param platformPhase - Current platform rotation phase (rad)
- * @param windmillPhase - Current windmill rotation phase (rad) - rotation around skirt center
- * @param eccentricRadius - Current eccentric radius (m)
- * @returns 3D position vector (z = 0 for horizontal plane)
+ * @param windmillPhase - Current windmill rotation phase (rad) - rotation around windmill center
+ * @param pivotRadius - Distance from platform center to pivot point (m)
+ * @param tiltAngle - Tilt angle of secondary platform (rad)
+ * @param secondaryPlatformOffset - Distance from pivot to secondary platform center (m)
+ * @returns 3D position vector in world frame
  */
 export function computeCabinPosition(
   cabinAngle: number,
   cabinDistance: number,
   platformPhase: number,
   windmillPhase: number,
-  eccentricRadius: number
+  pivotRadius: number,
+  tiltAngle: number,
+  secondaryPlatformOffset: number
 ): Vector3D {
-  // Eccentric center position in platform frame (fixed at angle 0, rotates with platform)
-  const eccCenterX = eccentricRadius;
-  const eccCenterY = 0;
+  // Step 1: Pivot point position in platform frame (horizontal plane)
+  // Pivot is at angle 0 in platform frame, at distance pivotRadius
+  const pivotX_plat = pivotRadius;
+  const pivotY_plat = 0;
+  const pivotZ_plat = 0; // On the platform surface
   
-  // Cabin position relative to eccentric center (in platform frame)
-  // Cabin angle is relative to windmill, so we add windmillPhase
-  const cabinAngleInPlatform = cabinAngle + windmillPhase;
-  const cabinX = eccCenterX + cabinDistance * Math.cos(cabinAngleInPlatform);
-  const cabinY = eccCenterY + cabinDistance * Math.sin(cabinAngleInPlatform);
+  // Step 2: Secondary platform center position relative to pivot point
+  // The secondary platform tilts about the pivot axis (which is along Y in platform frame)
+  // The secondary platform extends INWARD (over the primary platform), so offset is negative in X
+  // This is a 180° rotation from extending outward
+  // When tilted, the center moves in the X-Z plane:
+  //   - horizontal offset (X): -secondaryPlatformOffset * cos(α) (negative = toward platform center)
+  //   - vertical offset (Z): secondaryPlatformOffset * sin(α) (positive = upward)
+  const centerOffsetX = -secondaryPlatformOffset * Math.cos(tiltAngle);
+  const centerOffsetZ = secondaryPlatformOffset * Math.sin(tiltAngle);
   
-  // Rotate to world frame by platform phase
+  const centerX_plat = pivotX_plat + centerOffsetX;
+  const centerY_plat = pivotY_plat;
+  const centerZ_plat = pivotZ_plat + centerOffsetZ;
+  
+  // Step 3: Cabin position relative to secondary platform center
+  // The cabin is on the tilted disc at angle (cabinAngle + windmillPhase) from disc center
+  // The disc is tilted by tiltAngle about the Y-axis (pivot axis)
+  // 
+  // In the disc's local frame (before tilt), cabin is at:
+  //   local_x = cabinDistance * cos(cabinAngle + windmillPhase)
+  //   local_y = cabinDistance * sin(cabinAngle + windmillPhase)
+  //   local_z = 0
+  //
+  // After tilting about Y-axis by tiltAngle, this becomes:
+  //   tilted_x = local_x * cos(tiltAngle) + local_z * sin(tiltAngle) = local_x * cos(tiltAngle)
+  //   tilted_y = local_y
+  //   tilted_z = -local_x * sin(tiltAngle) + local_z * cos(tiltAngle) = -local_x * sin(tiltAngle)
+  // 
+  // Wait, I need to think about this more carefully.
+  // The tilt axis is perpendicular to the radial direction (tangent to platform edge).
+  // In platform frame, if pivot is at (pivotRadius, 0, 0), the tilt axis is along Y.
+  // Tilting means rotating about the Y-axis of the tilted frame.
+  // But the disc itself also rotates (windmill rotation).
+  // 
+  // Let me reconsider: the secondary platform is a disc that:
+  // 1. Is centered at the secondary platform center (which is at an offset from pivot)
+  // 2. Is tilted relative to horizontal by tiltAngle (rotation about pivot axis)
+  // 3. Rotates about its own center axis (perpendicular to disc surface)
+  //
+  // The cabin's position in the disc-local frame (disc is horizontal, not tilted):
+  const cabinAngleInDisc = cabinAngle + windmillPhase;
+  const localX = cabinDistance * Math.cos(cabinAngleInDisc);
+  const localY = cabinDistance * Math.sin(cabinAngleInDisc);
+  const localZ = 0;
+  
+  // Apply tilt rotation about the Y-axis (pivot axis, which is tangent to platform edge)
+  // The tilt angle is measured at T between:
+  //   - Line from T to Primary platform center (horizontal, toward -X)
+  //   - Line from T to Secondary platform center (tilted up)
+  // 
+  // Cabins on the inner side (negative localX, toward primary center) should go UP
+  // Cabins on the pivot side (positive localX, toward T) should go DOWN
+  //
+  // Standard rotation about Y by angle α:
+  // [cos(α)  0  sin(α)] [x]   [x*cos(α) + z*sin(α)]
+  // [  0    1    0    ] [y] = [y                  ]
+  // [-sin(α) 0  cos(α)] [z]   [-x*sin(α) + z*cos(α)]
+  const cosTilt = Math.cos(tiltAngle);
+  const sinTilt = Math.sin(tiltAngle);
+  const tiltedX = localX * cosTilt + localZ * sinTilt;
+  const tiltedY = localY;
+  const tiltedZ = -localX * sinTilt + localZ * cosTilt;
+  
+  // Cabin position in platform frame = center position + tilted offset
+  const cabinX_plat = centerX_plat + tiltedX;
+  const cabinY_plat = centerY_plat + tiltedY;
+  const cabinZ_plat = centerZ_plat + tiltedZ;
+  
+  // Step 4: Transform from platform frame to world frame
+  // Platform rotates about vertical (world Y) axis by platformPhase
+  // Rotation about Y axis:
+  // [cos(θ)  0  -sin(θ)] [x]   [x*cos(θ) - z*sin(θ)]
+  // [  0    1    0     ] [y] = [y                  ]
+  // [sin(θ)  0   cos(θ)] [z]   [x*sin(θ) + z*cos(θ)]
+  // 
+  // Wait, I'm mixing up coordinate conventions. Let me be explicit:
+  // - Physics convention: X and Y are horizontal, Z is vertical
+  // - Three.js convention: X and Z are horizontal, Y is vertical
+  //
+  // For physics, let's use: X-Y horizontal plane, Z vertical (up)
+  // Platform rotates about Z axis (vertical)
+  //
+  // Actually, looking at the existing code, it uses:
+  // - position.x, position.y in horizontal plane
+  // - position.z for vertical
+  // This is consistent. Let me redo this properly.
+  
+  // Redefining with clear convention:
+  // Platform frame: x-y is horizontal plane, z is vertical
+  // Pivot is at (pivotRadius, 0, 0) in platform frame
+  // Tilt axis is along y-direction (tangent to platform edge at pivot)
+  // Tilt rotates about the y-axis
+  
+  // For tilt rotation about y-axis (standard 3D rotation matrix):
+  // [cos(α)  0  sin(α)] [x]
+  // [  0    1    0    ] [y]
+  // [-sin(α) 0  cos(α)] [z]
+  
+  const finalCabinX_plat = centerX_plat + tiltedX;
+  const finalCabinY_plat = centerY_plat + tiltedY;
+  const finalCabinZ_plat = centerZ_plat + tiltedZ;
+  
+  // Transform to world frame: rotate about z-axis (vertical) by platformPhase
+  // [cos(θ)  -sin(θ)  0] [x]
+  // [sin(θ)   cos(θ)  0] [y]
+  // [  0        0     1] [z]
   const cosPlat = Math.cos(platformPhase);
   const sinPlat = Math.sin(platformPhase);
-  const worldX = cabinX * cosPlat - cabinY * sinPlat;
-  const worldY = cabinX * sinPlat + cabinY * cosPlat;
   
-  return { x: worldX, y: worldY, z: 0 };
+  const worldX = finalCabinX_plat * cosPlat - finalCabinY_plat * sinPlat;
+  const worldY = finalCabinX_plat * sinPlat + finalCabinY_plat * cosPlat;
+  const worldZ = finalCabinZ_plat;
+  
+  return { x: worldX, y: worldY, z: worldZ };
 }
 
 /**
@@ -63,14 +178,19 @@ export function computeCabinPosition(
  * 
  * Velocity = d(position)/dt
  * 
+ * This is computed numerically using central differences for simplicity
+ * and to avoid complex analytical derivatives of the tilted geometry.
+ * 
  * @param cabinAngle - Angle of cabin on windmill (rad) - fixed relative to windmill
- * @param cabinDistance - Distance from eccentric center (m)
+ * @param cabinDistance - Distance from secondary platform center (m)
  * @param platformPhase - Current platform rotation phase (rad)
  * @param platformAngularVelocity - Platform angular velocity (rad/s)
  * @param windmillPhase - Current windmill rotation phase (rad)
  * @param windmillAngularVelocity - Windmill angular velocity (rad/s)
- * @param eccentricRadius - Current eccentric radius (m)
- * @param eccentricRadiusVelocity - Rate of change of eccentric radius (m/s)
+ * @param pivotRadius - Distance from platform center to pivot point (m)
+ * @param tiltAngle - Tilt angle of secondary platform (rad)
+ * @param tiltAngularVelocity - Rate of change of tilt angle (rad/s)
+ * @param secondaryPlatformOffset - Distance from pivot to secondary platform center (m)
  * @returns 3D velocity vector
  */
 export function computeCabinVelocity(
@@ -80,73 +200,65 @@ export function computeCabinVelocity(
   platformAngularVelocity: number,
   windmillPhase: number,
   windmillAngularVelocity: number,
-  eccentricRadius: number,
-  eccentricRadiusVelocity: number
+  pivotRadius: number,
+  tiltAngle: number,
+  tiltAngularVelocity: number,
+  secondaryPlatformOffset: number
 ): Vector3D {
-  // Eccentric center position in platform frame (fixed at angle 0)
-  const eccCenterX = eccentricRadius;
-  const eccCenterY = 0;
+  // Use central differences for numerical derivative
+  const dt = 0.0001; // Small time step for numerical derivative
   
-  // Derivative of eccentric center position in platform frame
-  // d/dt [r_ecc, 0] = [dr_ecc/dt, 0]
-  const deccCenterX = eccentricRadiusVelocity;
-  const deccCenterY = 0;
+  // Position at t - dt/2
+  const pos1 = computeCabinPosition(
+    cabinAngle,
+    cabinDistance,
+    platformPhase - platformAngularVelocity * dt / 2,
+    windmillPhase - windmillAngularVelocity * dt / 2,
+    pivotRadius,
+    tiltAngle - tiltAngularVelocity * dt / 2,
+    secondaryPlatformOffset
+  );
   
-  // Cabin angle in platform frame (windmill rotation adds to cabin angle)
-  const cabinAngleInPlatform = cabinAngle + windmillPhase;
-  const cosCabin = Math.cos(cabinAngleInPlatform);
-  const sinCabin = Math.sin(cabinAngleInPlatform);
+  // Position at t + dt/2
+  const pos2 = computeCabinPosition(
+    cabinAngle,
+    cabinDistance,
+    platformPhase + platformAngularVelocity * dt / 2,
+    windmillPhase + windmillAngularVelocity * dt / 2,
+    pivotRadius,
+    tiltAngle + tiltAngularVelocity * dt / 2,
+    secondaryPlatformOffset
+  );
   
-  // Cabin position in platform frame (eccentric center + cabin offset)
-  const cabinX_plat = eccCenterX + cabinDistance * cosCabin;
-  const cabinY_plat = eccCenterY + cabinDistance * sinCabin;
-  
-  // Derivative of cabin position in platform frame
-  // d/dt [eccCenter + cabinDistance * (cos(cabinAngle + windmillPhase), sin(...))]
-  const dcabinX_plat = deccCenterX - cabinDistance * windmillAngularVelocity * sinCabin;
-  const dcabinY_plat = deccCenterY + cabinDistance * windmillAngularVelocity * cosCabin;
-  
-  // Transform to world frame: rotate by platform phase
-  // World position = R(θ_plat) * platform_position
-  // World velocity = R(θ_plat) * platform_velocity + dR/dθ * platform_position * ω_plat
-  const cosPlat = Math.cos(platformPhase);
-  const sinPlat = Math.sin(platformPhase);
-  
-  // Rotated velocity component
-  const velRotX = dcabinX_plat * cosPlat - dcabinY_plat * sinPlat;
-  const velRotY = dcabinX_plat * sinPlat + dcabinY_plat * cosPlat;
-  
-  // Additional term from platform rotation (Coriolis-like effect)
-  const velPlatX = -platformAngularVelocity * (cabinX_plat * sinPlat + cabinY_plat * cosPlat);
-  const velPlatY = platformAngularVelocity * (cabinX_plat * cosPlat - cabinY_plat * sinPlat);
-  
-  const worldX = velRotX + velPlatX;
-  const worldY = velRotY + velPlatY;
-  
-  return { x: worldX, y: worldY, z: 0 };
+  // Central difference
+  return {
+    x: (pos2.x - pos1.x) / dt,
+    y: (pos2.y - pos1.y) / dt,
+    z: (pos2.z - pos1.z) / dt
+  };
 }
 
 /**
  * Compute the acceleration of a cabin
  * 
  * Acceleration = d(velocity)/dt
- * Includes:
- * - Centripetal acceleration from platform rotation
- * - Centripetal acceleration from windmill rotation
- * - Coriolis effects
- * - Tangential acceleration from angular acceleration
+ * 
+ * This is computed numerically using central differences for simplicity
+ * and to avoid complex analytical derivatives of the tilted geometry.
  * 
  * @param cabinAngle - Angle of cabin on windmill (rad) - fixed relative to windmill
- * @param cabinDistance - Distance from eccentric center (m)
+ * @param cabinDistance - Distance from secondary platform center (m)
  * @param platformPhase - Current platform rotation phase (rad)
  * @param platformAngularVelocity - Platform angular velocity (rad/s)
  * @param platformAngularAcceleration - Platform angular acceleration (rad/s²)
  * @param windmillPhase - Current windmill rotation phase (rad)
  * @param windmillAngularVelocity - Windmill angular velocity (rad/s)
  * @param windmillAngularAcceleration - Windmill angular acceleration (rad/s²)
- * @param eccentricRadius - Current eccentric radius (m)
- * @param eccentricRadiusVelocity - Rate of change of eccentric radius (m/s)
- * @param eccentricRadiusAcceleration - Second derivative of eccentric radius (m/s²)
+ * @param pivotRadius - Distance from platform center to pivot point (m)
+ * @param tiltAngle - Tilt angle of secondary platform (rad)
+ * @param tiltAngularVelocity - Rate of change of tilt angle (rad/s)
+ * @param tiltAngularAcceleration - Second derivative of tilt angle (rad/s²)
+ * @param secondaryPlatformOffset - Distance from pivot to secondary platform center (m)
  * @returns 3D acceleration vector
  */
 export function computeCabinAcceleration(
@@ -158,77 +270,49 @@ export function computeCabinAcceleration(
   windmillPhase: number,
   windmillAngularVelocity: number,
   windmillAngularAcceleration: number,
-  eccentricRadius: number,
-  eccentricRadiusVelocity: number,
-  eccentricRadiusAcceleration: number
+  pivotRadius: number,
+  tiltAngle: number,
+  tiltAngularVelocity: number,
+  tiltAngularAcceleration: number,
+  secondaryPlatformOffset: number
 ): Vector3D {
-  // Eccentric center position in platform frame (fixed at angle 0)
-  const eccX_plat = eccentricRadius;
-  const eccY_plat = 0;
+  // Use central differences for numerical derivative of velocity
+  const dt = 0.0001; // Small time step for numerical derivative
   
-  // Eccentric center velocity in platform frame
-  const eccVX_plat = eccentricRadiusVelocity;
-  const eccVY_plat = 0;
+  // Velocity at t - dt/2
+  const vel1 = computeCabinVelocity(
+    cabinAngle,
+    cabinDistance,
+    platformPhase - platformAngularVelocity * dt / 2,
+    platformAngularVelocity - platformAngularAcceleration * dt / 2,
+    windmillPhase - windmillAngularVelocity * dt / 2,
+    windmillAngularVelocity - windmillAngularAcceleration * dt / 2,
+    pivotRadius,
+    tiltAngle - tiltAngularVelocity * dt / 2,
+    tiltAngularVelocity - tiltAngularAcceleration * dt / 2,
+    secondaryPlatformOffset
+  );
   
-  // Eccentric center acceleration in platform frame
-  // d²/dt² [r_ecc, 0] = [d²r_ecc/dt², 0]
-  const accEccX_plat = eccentricRadiusAcceleration;
-  const accEccY_plat = 0;
+  // Velocity at t + dt/2
+  const vel2 = computeCabinVelocity(
+    cabinAngle,
+    cabinDistance,
+    platformPhase + platformAngularVelocity * dt / 2,
+    platformAngularVelocity + platformAngularAcceleration * dt / 2,
+    windmillPhase + windmillAngularVelocity * dt / 2,
+    windmillAngularVelocity + windmillAngularAcceleration * dt / 2,
+    pivotRadius,
+    tiltAngle + tiltAngularVelocity * dt / 2,
+    tiltAngularVelocity + tiltAngularAcceleration * dt / 2,
+    secondaryPlatformOffset
+  );
   
-  // Cabin angle in platform frame (windmill rotation adds to cabin angle)
-  const cabinAngleInPlatform = cabinAngle + windmillPhase;
-  const cosCabin = Math.cos(cabinAngleInPlatform);
-  const sinCabin = Math.sin(cabinAngleInPlatform);
-  
-  // Cabin position in platform frame
-  const cabinX_plat = eccX_plat + cabinDistance * cosCabin;
-  const cabinY_plat = eccY_plat + cabinDistance * sinCabin;
-  
-  // Cabin velocity in platform frame
-  const cabinVX_plat = eccVX_plat - cabinDistance * windmillAngularVelocity * sinCabin;
-  const cabinVY_plat = eccVY_plat + cabinDistance * windmillAngularVelocity * cosCabin;
-  
-  // Cabin acceleration in platform frame
-  // d²/dt² [eccCenter + cabinDistance * (cos(cabinAngle + windmillPhase), sin(...))]
-  const cabinAccX_plat = accEccX_plat 
-    - cabinDistance * windmillAngularVelocity * windmillAngularVelocity * cosCabin
-    - cabinDistance * windmillAngularAcceleration * sinCabin;
-  const cabinAccY_plat = accEccY_plat
-    - cabinDistance * windmillAngularVelocity * windmillAngularVelocity * sinCabin
-    + cabinDistance * windmillAngularAcceleration * cosCabin;
-  
-  // Transform to world frame: R(θ_plat) rotates platform frame to world frame
-  // World acceleration = R(θ) * a_plat + 2*ω × (R(θ) * v_plat) + ω × (ω × (R(θ) * r_plat))
-  const cosPlat = Math.cos(platformPhase);
-  const sinPlat = Math.sin(platformPhase);
-  
-  // Rotate position, velocity, and acceleration to world frame
-  const rWorldX = cabinX_plat * cosPlat - cabinY_plat * sinPlat;
-  const rWorldY = cabinX_plat * sinPlat + cabinY_plat * cosPlat;
-  
-  const vWorldX = cabinVX_plat * cosPlat - cabinVY_plat * sinPlat;
-  const vWorldY = cabinVX_plat * sinPlat + cabinVY_plat * cosPlat;
-  
-  const aWorldX_rot = cabinAccX_plat * cosPlat - cabinAccY_plat * sinPlat;
-  const aWorldY_rot = cabinAccX_plat * sinPlat + cabinAccY_plat * cosPlat;
-  
-  // Coriolis term: 2 * ω × v
-  const coriolisX = -2 * platformAngularVelocity * vWorldY;
-  const coriolisY = 2 * platformAngularVelocity * vWorldX;
-  
-  // Centripetal term: ω × (ω × r) = -ω² * r
-  const centripetalX = -platformAngularVelocity * platformAngularVelocity * rWorldX;
-  const centripetalY = -platformAngularVelocity * platformAngularVelocity * rWorldY;
-  
-  // Euler term (angular acceleration): α × r (if platformAngularAcceleration != 0)
-  const eulerX = -platformAngularAcceleration * rWorldY;
-  const eulerY = platformAngularAcceleration * rWorldX;
-  
-  // Total acceleration in world frame
-  const worldAccX = aWorldX_rot + coriolisX + centripetalX + eulerX;
-  const worldAccY = aWorldY_rot + coriolisY + centripetalY + eulerY;
-  
-  return { x: worldAccX, y: worldAccY, z: 0 };
+  // Central difference
+  return {
+    x: (vel2.x - vel1.x) / dt,
+    y: (vel2.y - vel1.y) / dt,
+    z: (vel2.z - vel1.z) / dt
+  };
 }
 
 /**
@@ -289,8 +373,8 @@ export function computeGForce(acceleration: Vector3D): number {
  * 
  * This is the main entry point for physics calculations per cabin.
  * 
- * @param cabinAngle - Angle of cabin on platform (rad)
- * @param cabinDistance - Distance from platform center (m)
+ * @param cabinAngle - Angle of cabin on windmill (rad)
+ * @param cabinDistance - Distance from secondary platform center (m)
  * @param state - Current simulation state
  * @param dt - Time step (s)
  * @returns Updated cabin state
@@ -307,12 +391,14 @@ export function updateCabinPhysics(
     cabinDistance,
     state.platformPhase,
     state.windmillPhase,
-    state.eccentric.radius
+    state.tilt.pivotRadius,
+    state.tilt.tiltAngle,
+    state.tilt.secondaryPlatformOffset
   );
   
   // Compute velocity using time derivatives
-  // For now, assume radius velocity is zero (will be computed from ramping later)
-  const eccentricRadiusVelocity = 0; // TODO: compute from ramping
+  // For now, assume tilt velocity is zero (will be computed from ramping later)
+  const tiltAngularVelocity = 0; // TODO: compute from ramping
   const velocity = computeCabinVelocity(
     cabinAngle,
     cabinDistance,
@@ -320,16 +406,18 @@ export function updateCabinPhysics(
     state.platform.angularVelocity,
     state.windmillPhase,
     state.windmill.angularVelocity,
-    state.eccentric.radius,
-    eccentricRadiusVelocity
+    state.tilt.pivotRadius,
+    state.tilt.tiltAngle,
+    tiltAngularVelocity,
+    state.tilt.secondaryPlatformOffset
   );
   
   // Compute acceleration using second derivatives
-  // For now, assume angular accelerations and radius acceleration are zero
+  // For now, assume angular accelerations and tilt acceleration are zero
   // (These will be computed from ramping in the future)
   const platformAngularAcceleration = 0; // TODO: compute from ramping
   const windmillAngularAcceleration = 0; // TODO: compute from ramping
-  const eccentricRadiusAcceleration = 0; // TODO: compute from ramping
+  const tiltAngularAcceleration = 0; // TODO: compute from ramping
   
   const acceleration = computeCabinAcceleration(
     cabinAngle,
@@ -340,14 +428,20 @@ export function updateCabinPhysics(
     state.windmillPhase,
     state.windmill.angularVelocity,
     windmillAngularAcceleration,
-    state.eccentric.radius,
-    eccentricRadiusVelocity,
-    eccentricRadiusAcceleration
+    state.tilt.pivotRadius,
+    state.tilt.tiltAngle,
+    tiltAngularVelocity,
+    tiltAngularAcceleration,
+    state.tilt.secondaryPlatformOffset
   );
   
   // Decompose acceleration into components
   const { radial, tangential } = decomposeAcceleration(acceleration, position, velocity);
-  const totalAcceleration = Math.sqrt(acceleration.x * acceleration.x + acceleration.y * acceleration.y);
+  const totalAcceleration = Math.sqrt(
+    acceleration.x * acceleration.x + 
+    acceleration.y * acceleration.y + 
+    acceleration.z * acceleration.z
+  );
   const gForce = computeGForce(acceleration);
   
   return {

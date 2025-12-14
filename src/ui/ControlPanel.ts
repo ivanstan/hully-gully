@@ -6,7 +6,7 @@
  * Controls:
  * - Platform motor speed and direction
  * - Windmill motor speed and direction (rotates secondary platform around skirt center)
- * - Eccentric radius (hydraulic control)
+ * - Tilt angle (hydraulic control) - angle of secondary platform relative to primary
  * - Emergency stop
  */
 
@@ -37,10 +37,10 @@ export class ControlPanel {
   private windmillDirectionCW: HTMLButtonElement;
   private windmillDirectionCCW: HTMLButtonElement;
   
-  // Eccentric radius controls
-  private radiusInput: HTMLInputElement;
-  private radiusUpButton: HTMLButtonElement;
-  private radiusDownButton: HTMLButtonElement;
+  // Tilt angle controls
+  private tiltInput: HTMLInputElement;
+  private tiltUpButton: HTMLButtonElement;
+  private tiltDownButton: HTMLButtonElement;
   
   // System controls
   private emergencyStopButton: HTMLButtonElement;
@@ -79,15 +79,15 @@ export class ControlPanel {
       (direction) => this.updateWindmillDirection(direction)
     );
     
-    // Eccentric Radius Section
-    const radiusSection = this.createRadiusSection();
+    // Tilt Angle Section
+    const tiltSection = this.createTiltSection();
     
     // System Controls Section
     const systemSection = this.createSystemSection();
     
     this.container.appendChild(platformSection);
     this.container.appendChild(windmillSection);
-    this.container.appendChild(radiusSection);
+    this.container.appendChild(tiltSection);
     this.container.appendChild(systemSection);
   }
   
@@ -208,65 +208,65 @@ export class ControlPanel {
   }
   
   /**
-   * Create eccentric radius control section
+   * Create tilt angle control section
    */
-  private createRadiusSection(): HTMLElement {
+  private createTiltSection(): HTMLElement {
     const section = document.createElement('div');
     section.className = 'control-section';
     
     const titleEl = document.createElement('h3');
-    titleEl.textContent = 'Eccentric Radius';
+    titleEl.textContent = 'Tilt Angle';
     section.appendChild(titleEl);
     
-    const radiusGroup = document.createElement('div');
-    radiusGroup.className = 'control-group';
+    const tiltGroup = document.createElement('div');
+    tiltGroup.className = 'control-group';
     
-    const radiusLabel = document.createElement('label');
-    radiusLabel.textContent = 'Radius:';
-    radiusLabel.setAttribute('for', 'radius-input');
-    radiusGroup.appendChild(radiusLabel);
+    const tiltLabel = document.createElement('label');
+    tiltLabel.textContent = 'Angle:';
+    tiltLabel.setAttribute('for', 'tilt-input');
+    tiltGroup.appendChild(tiltLabel);
     
-    const radiusContainer = document.createElement('div');
-    radiusContainer.className = 'radius-control';
+    const tiltContainer = document.createElement('div');
+    tiltContainer.className = 'tilt-control';
     
-    const radiusDownBtn = document.createElement('button');
-    radiusDownBtn.textContent = '▼';
-    radiusDownBtn.className = 'radius-btn';
-    radiusDownBtn.addEventListener('click', () => this.decreaseRadius());
+    const tiltDownBtn = document.createElement('button');
+    tiltDownBtn.textContent = '▼';
+    tiltDownBtn.className = 'tilt-btn';
+    tiltDownBtn.addEventListener('click', () => this.decreaseTilt());
     
-    const radiusInput = document.createElement('input');
-    radiusInput.type = 'number';
-    radiusInput.id = 'radius-input';
-    radiusInput.min = '2';
-    radiusInput.max = '6';
-    radiusInput.step = '0.1';
-    radiusInput.value = '4';
-    radiusInput.className = 'radius-input';
-    radiusInput.addEventListener('change', () => {
-      const value = parseFloat(radiusInput.value);
-      this.updateRadius(value);
+    const tiltInput = document.createElement('input');
+    tiltInput.type = 'number';
+    tiltInput.id = 'tilt-input';
+    tiltInput.min = '0';
+    tiltInput.max = '30';
+    tiltInput.step = '1';
+    tiltInput.value = '15';
+    tiltInput.className = 'tilt-input';
+    tiltInput.addEventListener('change', () => {
+      const valueDegrees = parseFloat(tiltInput.value);
+      this.updateTilt(valueDegrees * Math.PI / 180); // Convert degrees to radians
     });
     
-    const radiusUpBtn = document.createElement('button');
-    radiusUpBtn.textContent = '▲';
-    radiusUpBtn.className = 'radius-btn';
-    radiusUpBtn.addEventListener('click', () => this.increaseRadius());
+    const tiltUpBtn = document.createElement('button');
+    tiltUpBtn.textContent = '▲';
+    tiltUpBtn.className = 'tilt-btn';
+    tiltUpBtn.addEventListener('click', () => this.increaseTilt());
     
-    radiusContainer.appendChild(radiusDownBtn);
-    radiusContainer.appendChild(radiusInput);
-    radiusContainer.appendChild(radiusUpBtn);
-    radiusGroup.appendChild(radiusContainer);
+    tiltContainer.appendChild(tiltDownBtn);
+    tiltContainer.appendChild(tiltInput);
+    tiltContainer.appendChild(tiltUpBtn);
+    tiltGroup.appendChild(tiltContainer);
     
-    const radiusUnit = document.createElement('span');
-    radiusUnit.className = 'radius-unit';
-    radiusUnit.textContent = 'm';
-    radiusGroup.appendChild(radiusUnit);
+    const tiltUnit = document.createElement('span');
+    tiltUnit.className = 'tilt-unit';
+    tiltUnit.textContent = '°';
+    tiltGroup.appendChild(tiltUnit);
     
-    section.appendChild(radiusGroup);
+    section.appendChild(tiltGroup);
     
-    this.radiusInput = radiusInput;
-    this.radiusDownButton = radiusDownBtn;
-    this.radiusUpButton = radiusUpBtn;
+    this.tiltInput = tiltInput;
+    this.tiltDownButton = tiltDownBtn;
+    this.tiltUpButton = tiltUpBtn;
     
     return section;
   }
@@ -340,31 +340,31 @@ export class ControlPanel {
   }
   
   /**
-   * Increase eccentric radius
+   * Increase tilt angle
    */
-  private increaseRadius(): void {
-    const current = parseFloat(this.radiusInput.value);
-    const newValue = Math.min(6, current + 0.5);
-    this.radiusInput.value = newValue.toString();
-    this.updateRadius(newValue);
+  private increaseTilt(): void {
+    const currentDegrees = parseFloat(this.tiltInput.value);
+    const newValueDegrees = Math.min(30, currentDegrees + 5);
+    this.tiltInput.value = newValueDegrees.toString();
+    this.updateTilt(newValueDegrees * Math.PI / 180);
   }
   
   /**
-   * Decrease eccentric radius
+   * Decrease tilt angle
    */
-  private decreaseRadius(): void {
-    const current = parseFloat(this.radiusInput.value);
-    const newValue = Math.max(2, current - 0.5);
-    this.radiusInput.value = newValue.toString();
-    this.updateRadius(newValue);
+  private decreaseTilt(): void {
+    const currentDegrees = parseFloat(this.tiltInput.value);
+    const newValueDegrees = Math.max(0, currentDegrees - 5);
+    this.tiltInput.value = newValueDegrees.toString();
+    this.updateTilt(newValueDegrees * Math.PI / 180);
   }
   
   /**
-   * Update eccentric radius
+   * Update tilt angle (in radians)
    */
-  private updateRadius(radius: number): void {
+  private updateTilt(tiltAngle: number): void {
     this.callbacks.onControlsChange({
-      eccentricRadius: radius
+      tiltAngle: tiltAngle
     });
   }
   
@@ -412,9 +412,10 @@ export class ControlPanel {
       );
     }
     
-    // Update radius
-    if (this.radiusInput) {
-      this.radiusInput.value = controls.eccentricRadius.toString();
+    // Update tilt angle (convert radians to degrees for display)
+    if (this.tiltInput) {
+      const tiltDegrees = (controls.tiltAngle * 180 / Math.PI).toFixed(0);
+      this.tiltInput.value = tiltDegrees;
     }
   }
 }

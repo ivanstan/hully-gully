@@ -293,44 +293,85 @@ export class RenderingEngine {
    * This is the ONLY way simulation state affects rendering.
    * No physics calculations happen here.
    * 
+   * Coordinate mapping:
+   * - Physics: X-Y horizontal plane, Z vertical (up)
+   * - Three.js: X-Z horizontal plane, Y vertical (up)
+   * - Mapping: physics (x, y, z) → Three.js (x, z, y)
+   * 
    * @param state - Current simulation state
    */
   update(state: SimulationState): void {
     // Update platform rotation
-    // Disc is in Z-X plane, rotates around Y-axis (vertical)
+    // Platform rotates around Y-axis (vertical in Three.js)
     if (this.platformMesh) {
       this.platformMesh.rotation.y = state.platformPhase;
     }
     
-    // Update eccentric position and rotation
-    // Eccentric center is at a fixed angle (0) on the platform, rotates with platform
+    // Calculate pivot point position in world coordinates
+    // Pivot is at the edge of the primary platform (at angle 0 in platform frame)
+    const pivotX_physics = state.tilt.pivotRadius;
+    const pivotY_physics = 0;
+    // Rotate by platform phase to get world position
+    const pivotWorldX = pivotX_physics * Math.cos(state.platformPhase) - pivotY_physics * Math.sin(state.platformPhase);
+    const pivotWorldY = pivotX_physics * Math.sin(state.platformPhase) + pivotY_physics * Math.cos(state.platformPhase);
+    
+    // Update pivot marker (using eccentricMesh as pivot visualization)
     if (this.eccentricMesh) {
-      // Position eccentric based on radius (at angle 0 on platform)
-      // Map physics (x, y) to Three.js (z, x) for Z-X plane
-      const eccX_physics = state.eccentric.radius; // At angle 0, so cos(0) = 1
-      const eccY_physics = 0; // sin(0) = 0
-      // Rotate by platform phase to get world position
-      const worldX = eccX_physics * Math.cos(state.platformPhase) - eccY_physics * Math.sin(state.platformPhase);
-      const worldY = eccX_physics * Math.sin(state.platformPhase) + eccY_physics * Math.cos(state.platformPhase);
-      this.eccentricMesh.position.set(worldY, 0.5, worldX);
-      // Eccentric rotates with platform around Y-axis
+      // Map physics (x, y) to Three.js (x, z)
+      this.eccentricMesh.position.set(pivotWorldX, 0.3, pivotWorldY);
       this.eccentricMesh.rotation.y = state.platformPhase;
     }
     
+    // Calculate secondary platform center position
+    // Center is at offset from pivot, tilted by tiltAngle
+    // The secondary platform extends INWARD (over primary platform), so offset is negative
+    const tiltAngle = state.tilt.tiltAngle;
+    const offset = state.tilt.secondaryPlatformOffset;
+    
+    // In platform frame, the offset is along -x (toward center) with tilt
+    const centerOffsetX_plat = -offset * Math.cos(tiltAngle); // Negative = toward center
+    const centerOffsetZ_plat = offset * Math.sin(tiltAngle); // Vertical offset (up)
+    
+    // Secondary platform center in platform frame
+    const centerX_plat = state.tilt.pivotRadius + centerOffsetX_plat;
+    const centerY_plat = 0;
+    const centerZ_plat = centerOffsetZ_plat;
+    
+    // Rotate to world frame
+    const centerWorldX = centerX_plat * Math.cos(state.platformPhase) - centerY_plat * Math.sin(state.platformPhase);
+    const centerWorldY = centerX_plat * Math.sin(state.platformPhase) + centerY_plat * Math.cos(state.platformPhase);
+    const centerWorldZ = centerZ_plat;
+    
     // Update windmill group position and rotation
-    // Skirt and cabins rotate together as one system around Y-axis at skirt center
     if (this.windmillGroup) {
-      // Position windmill group at eccentric center (skirt center)
-      // Eccentric center in world coordinates (rotated by platform phase)
-      const eccX_physics = state.eccentric.radius;
-      const eccY_physics = 0;
-      const worldX = eccX_physics * Math.cos(state.platformPhase) - eccY_physics * Math.sin(state.platformPhase);
-      const worldY = eccX_physics * Math.sin(state.platformPhase) + eccY_physics * Math.cos(state.platformPhase);
-      this.windmillGroup.position.set(worldY, 0, worldX);
+      // Position windmill group at secondary platform center
+      // Map physics (x, y, z) to Three.js (x, z, y)
+      this.windmillGroup.position.set(centerWorldX, centerWorldZ + 0.5, centerWorldY);
       
-      // Rotate windmill group (skirt + cabins) around Y-axis at skirt center
-      // Windmill rotates around its own center (windmillPhase) and also rotates with platform
+      // The windmill group needs complex rotation:
+      // 1. Tilt about the pivot axis (which is perpendicular to radial direction)
+      // 2. Rotate around its own axis (windmill phase)
+      // 3. Rotate with platform
+      
+      // Reset rotation and apply in order
+      this.windmillGroup.rotation.set(0, 0, 0);
+      
+      // First: apply windmill rotation (around local Y-axis, which is normal to disc)
+      // But since the disc is tilted, we need to handle this carefully
+      
+      // The tilt axis is perpendicular to the radial direction in the platform frame
+      // In platform frame at angle 0, radial is along +X, so tilt axis is along +Y
+      // After platform rotation, tilt axis rotates with platform
+      
+      // Apply platform rotation first
       this.windmillGroup.rotation.y = state.platformPhase + state.windmillPhase;
+      
+      // Apply tilt rotation about the pivot axis (perpendicular to radial direction)
+      // The tilt angle is at T between line to primary center and line to secondary center
+      // The inner edge (toward primary center) rises, pivot edge stays level
+      // Pivot axis in world frame: perpendicular to radial direction
+      this.windmillGroup.rotation.x = tiltAngle * Math.cos(state.platformPhase + Math.PI/2);
+      this.windmillGroup.rotation.z = tiltAngle * Math.sin(state.platformPhase + Math.PI/2);
     }
     
     // Update or create cabin meshes
@@ -339,33 +380,23 @@ export class RenderingEngine {
       const cabinMaterial = new THREE.MeshStandardMaterial({ color: 0x00aaff });
       const cabinMesh = new THREE.Mesh(cabinGeometry, cabinMaterial);
       cabinMesh.castShadow = true;
-      // Add to windmill group instead of scene
-      if (this.windmillGroup) {
-        this.windmillGroup.add(cabinMesh);
-      } else {
-        this.scene.add(cabinMesh);
-      }
+      // Add cabins to scene directly (not to windmill group) for accurate positioning
+      this.scene.add(cabinMesh);
       this.cabinMeshes.push(cabinMesh);
     }
     
-    // Update cabin positions and colors
-    // Note: Cabins are now in windmill group, so positions are relative to group center
+    // Update cabin positions from physics (world coordinates)
     for (let i = 0; i < state.cabins.length; i++) {
       const cabin = state.cabins[i];
       const mesh = this.cabinMeshes[i];
       
-      // Calculate cabin position relative to eccentric center (in platform frame)
-      // Cabin angle is relative to windmill, so we add windmillPhase
-      const cabinAngleInPlatform = cabin.platformAngle + state.windmillPhase;
-      const relX = cabin.distanceFromCenter * Math.cos(cabinAngleInPlatform);
-      const relY = cabin.distanceFromCenter * Math.sin(cabinAngleInPlatform);
+      // Use physics-computed world position directly
+      // Map physics (x, y, z) to Three.js (x, z, y)
+      mesh.position.set(cabin.position.x, cabin.position.z + 1, cabin.position.y);
       
-      // Set position relative to windmill group center
-      // Map physics (x, y, z) to Three.js (y, z, x) for Z-X plane disc
-      mesh.position.set(relY, cabin.position.z + 1, relX);
-      
-      // Cabins rotate with windmill group, so no individual rotation needed
-      mesh.rotation.y = 0;
+      // Rotate cabin to face outward (optional, based on position)
+      const angle = Math.atan2(cabin.position.y, cabin.position.x);
+      mesh.rotation.y = angle;
       
       // Optional: Color by G-force
       if (this.showGForceColors) {
@@ -396,17 +427,17 @@ export class RenderingEngine {
     
     // Create arrows for each cabin
     for (const cabin of cabins) {
-      // Map physics (x, y, z) to Three.js (y, z, x) for Z-X plane disc
+      // Map physics (x, y, z) to Three.js (x, z, y)
       const direction = new THREE.Vector3(
-        cabin.acceleration.y,
+        cabin.acceleration.x,
         cabin.acceleration.z,
-        cabin.acceleration.x
+        cabin.acceleration.y
       ).normalize();
       
       const origin = new THREE.Vector3(
-        cabin.position.y,
+        cabin.position.x,
         cabin.position.z + 1,
-        cabin.position.x
+        cabin.position.y
       );
       
       const length = cabin.totalAcceleration * 0.1; // Scale for visibility
@@ -461,13 +492,13 @@ export class RenderingEngine {
   setCabinView(cabinIndex: number, state: SimulationState): void {
     if (cabinIndex >= 0 && cabinIndex < state.cabins.length) {
       const cabin = state.cabins[cabinIndex];
-      // Map physics (x, y, z) to Three.js (y, z, x) for Z-X plane disc
+      // Map physics (x, y, z) to Three.js (x, z, y)
       this.camera.position.set(
-        cabin.position.y,
+        cabin.position.x + 5,
         cabin.position.z + 2,
-        cabin.position.x + 5
+        cabin.position.y
       );
-      this.controls.target.set(cabin.position.y, cabin.position.z, cabin.position.x);
+      this.controls.target.set(cabin.position.x, cabin.position.z, cabin.position.y);
       this.controls.update();
     }
   }

@@ -76,9 +76,11 @@ export class SimulationEngine {
         direction: this.config.initialControls.platformDirection,
         targetAngularVelocity: this.config.initialControls.platformSpeed
       },
-      eccentric: {
-        radius: this.config.initialControls.eccentricRadius,
-        targetRadius: this.config.initialControls.eccentricRadius
+      tilt: {
+        pivotRadius: this.config.pivotRadius,
+        tiltAngle: this.config.initialControls.tiltAngle,
+        targetTiltAngle: this.config.initialControls.tiltAngle,
+        secondaryPlatformOffset: this.config.secondaryPlatformOffset
       },
       windmill: {
         angularVelocity: this.config.initialControls.windmillSpeed,
@@ -117,13 +119,13 @@ export class SimulationEngine {
     if (controls.windmillSpeed !== undefined) {
       this.state.windmill.targetAngularVelocity = controls.windmillSpeed;
     }
-    if (controls.eccentricRadius !== undefined) {
+    if (controls.tiltAngle !== undefined) {
       // Clamp to valid range
       const clamped = Math.max(
-        this.config.minEccentricRadius,
-        Math.min(this.config.maxEccentricRadius, controls.eccentricRadius)
+        this.config.minTiltAngle,
+        Math.min(this.config.maxTiltAngle, controls.tiltAngle)
       );
-      this.state.eccentric.targetRadius = clamped;
+      this.state.tilt.targetTiltAngle = clamped;
     }
     if (controls.platformDirection !== undefined) {
       this.state.platform.direction = controls.platformDirection;
@@ -181,11 +183,11 @@ export class SimulationEngine {
       dt
     );
     
-    // Ramp eccentric radius toward target
-    this.state.eccentric.radius = this.rampValue(
-      this.state.eccentric.radius,
-      this.state.eccentric.targetRadius,
-      this.config.ramping.radiusRampTime,
+    // Ramp tilt angle toward target
+    this.state.tilt.tiltAngle = this.rampValue(
+      this.state.tilt.tiltAngle,
+      this.state.tilt.targetTiltAngle,
+      this.config.ramping.tiltRampTime,
       dt
     );
     

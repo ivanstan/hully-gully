@@ -49,14 +49,29 @@ export interface PlatformParams {
 }
 
 /**
- * Eccentric parameters
- * Note: Eccentric rotates with the main platform (no independent rotation)
+ * Tilt mechanism parameters
+ * 
+ * The secondary platform (windmill) tilts about a pivot axis that is tangent
+ * to both platforms. The pivot point is located at the edge of the primary
+ * platform, where the secondary platform touches it.
+ * 
+ * Geometry:
+ * - The pivot axis is perpendicular to the line from platform center to pivot point
+ * - The pivot point is at distance pivotRadius from the platform center
+ * - The tilt angle determines how much the secondary platform is inclined
+ * - The secondary platform center is offset from the pivot point
+ * 
+ * Note: Pivot point rotates with the main platform (fixed relative to platform)
  */
-export interface EccentricParams {
-  /** Current eccentric radius (m) - distance from platform center to eccentric center */
-  radius: number;
-  /** Target radius (for hydraulic control) */
-  targetRadius: number;
+export interface TiltParams {
+  /** Distance from platform center to pivot point (m) - point of tangency */
+  pivotRadius: number;
+  /** Current tilt angle (rad) - angle between primary and secondary platforms */
+  tiltAngle: number;
+  /** Target tilt angle (for hydraulic control) */
+  targetTiltAngle: number;
+  /** Distance from pivot point to secondary platform center along the tilt (m) */
+  secondaryPlatformOffset: number;
 }
 
 /**
@@ -104,8 +119,8 @@ export interface SimulationState {
   time: number;
   /** Main platform parameters */
   platform: PlatformParams;
-  /** Eccentric parameters */
-  eccentric: EccentricParams;
+  /** Tilt mechanism parameters (replaces old eccentric model) */
+  tilt: TiltParams;
   /** Windmill parameters (secondary platform) */
   windmill: WindmillParams;
   /** Current phase angle of platform rotation (rad) */
@@ -125,8 +140,8 @@ export interface OperatorControls {
   platformSpeed: number;
   /** Target windmill angular velocity (rad/s) */
   windmillSpeed: number;
-  /** Target eccentric radius (m) */
-  eccentricRadius: number;
+  /** Target tilt angle (rad) - angle between primary and secondary platforms */
+  tiltAngle: number;
   /** Platform rotation direction */
   platformDirection: RotationDirection;
   /** Windmill rotation direction */
@@ -141,8 +156,8 @@ export interface RampParams {
   platformRampTime: number;
   /** Time constant for windmill velocity ramping (s) */
   windmillRampTime: number;
-  /** Time constant for radius ramping (s) */
-  radiusRampTime: number;
+  /** Time constant for tilt angle ramping (s) */
+  tiltRampTime: number;
 }
 
 /**
@@ -157,10 +172,14 @@ export interface SimulationConfig {
   platformRadius: number;
   /** Radius of windmill/secondary platform (m) */
   windmillRadius: number;
-  /** Minimum eccentric radius (m) */
-  minEccentricRadius: number;
-  /** Maximum eccentric radius (m) */
-  maxEccentricRadius: number;
+  /** Distance from platform center to pivot point (m) - point of tangency */
+  pivotRadius: number;
+  /** Distance from pivot point to secondary platform center (m) */
+  secondaryPlatformOffset: number;
+  /** Minimum tilt angle (rad) */
+  minTiltAngle: number;
+  /** Maximum tilt angle (rad) */
+  maxTiltAngle: number;
   /** Ramping parameters */
   ramping: RampParams;
   /** Initial operator controls */
@@ -176,7 +195,7 @@ export interface DataPoint {
   windmillPhase: number;
   platformAngularVelocity: number;
   windmillAngularVelocity: number;
-  eccentricRadius: number;
+  tiltAngle: number;
   cabinData: Array<{
     gForce: number;
     totalAcceleration: number;

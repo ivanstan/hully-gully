@@ -29,22 +29,31 @@ class BalerinaSimulator {
     const windmillRadius = 9; // meters (secondary platform radius)
     const platformRadius = (2 / 3) * windmillRadius; // meters (main platform radius = 2/3 * windmill)
     
+    // Pivot point is at the edge of the primary platform where the secondary platform touches
+    const pivotRadius = platformRadius; // Point of tangency at edge of primary platform
+    
+    // Secondary platform center offset from pivot point
+    // This determines how far the center of the tilted disc is from the pivot
+    const secondaryPlatformOffset = windmillRadius * 0.5; // Half of windmill radius
+    
     const config: SimulationConfig = {
       timeStep: 0.01, // 10ms fixed timestep for physics
       numCabins: 8,
       platformRadius: platformRadius,
       windmillRadius: windmillRadius,
-      minEccentricRadius: 2, // meters
-      maxEccentricRadius: 6, // meters
+      pivotRadius: pivotRadius,
+      secondaryPlatformOffset: secondaryPlatformOffset,
+      minTiltAngle: 0, // radians (flat)
+      maxTiltAngle: Math.PI / 6, // radians (30 degrees max tilt)
       ramping: {
         platformRampTime: 2.0, // seconds
         windmillRampTime: 2.0, // seconds
-        radiusRampTime: 1.0 // seconds
+        tiltRampTime: 1.0 // seconds
       },
       initialControls: {
         platformSpeed: 0.5, // rad/s
         windmillSpeed: 1.0, // rad/s
-        eccentricRadius: 4, // meters
+        tiltAngle: Math.PI / 12, // radians (15 degrees initial tilt)
         platformDirection: RotationDirection.COUNTER_CLOCKWISE,
         windmillDirection: RotationDirection.COUNTER_CLOCKWISE
       }
