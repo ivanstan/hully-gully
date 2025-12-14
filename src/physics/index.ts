@@ -6,8 +6,9 @@
  * 
  * The motion is a superposition of:
  * 1. Main platform rotation around vertical axis
- * 2. Eccentric (windmill) rotation with variable radius
- * 3. Cabins fixed to platform at specific positions
+ * 2. Eccentric center at variable radius (rotates with platform, no independent rotation)
+ * 3. Windmill (secondary platform: skirt + cabins) rotation around eccentric center
+ * 4. Cabins fixed to windmill at specific positions
  * 
  * All calculations use SI units and are deterministic.
  */
@@ -19,14 +20,15 @@ import { Vector2D, Vector3D, CabinState, SimulationState } from '../types/index.
  * 
  * Equations:
  * - Platform center rotates: (0, 0) in platform frame
- * - Eccentric center: r_ecc * (cos(θ_ecc), sin(θ_ecc)) in platform frame
- * - Cabin position: eccentric_center + cabin_offset in platform frame
+ * - Eccentric center: (r_ecc, 0) in platform frame (fixed angle, rotates with platform)
+ * - Windmill rotates around eccentric center: cabin positions rotate by windmillPhase
+ * - Cabin position: eccentric_center + rotated_cabin_offset in platform frame
  * - Transform to world: rotate by platform angle θ_plat
  * 
- * @param cabinAngle - Angle of cabin on platform (rad)
- * @param cabinDistance - Distance from platform center (m)
+ * @param cabinAngle - Angle of cabin on windmill (rad) - fixed relative to windmill
+ * @param cabinDistance - Distance from eccentric center (m)
  * @param platformPhase - Current platform rotation phase (rad)
- * @param eccentricPhase - Current eccentric rotation phase (rad)
+ * @param windmillPhase - Current windmill rotation phase (rad) - rotation around skirt center
  * @param eccentricRadius - Current eccentric radius (m)
  * @returns 3D position vector (z = 0 for horizontal plane)
  */
@@ -34,16 +36,18 @@ export function computeCabinPosition(
   cabinAngle: number,
   cabinDistance: number,
   platformPhase: number,
-  eccentricPhase: number,
+  windmillPhase: number,
   eccentricRadius: number
 ): Vector3D {
-  // Eccentric center position in platform frame
-  const eccCenterX = eccentricRadius * Math.cos(eccentricPhase);
-  const eccCenterY = eccentricRadius * Math.sin(eccentricPhase);
+  // Eccentric center position in platform frame (fixed at angle 0, rotates with platform)
+  const eccCenterX = eccentricRadius;
+  const eccCenterY = 0;
   
-  // Cabin position relative to platform center (in platform frame)
-  const cabinX = eccCenterX + cabinDistance * Math.cos(cabinAngle);
-  const cabinY = eccCenterY + cabinDistance * Math.sin(cabinAngle);
+  // Cabin position relative to eccentric center (in platform frame)
+  // Cabin angle is relative to windmill, so we add windmillPhase
+  const cabinAngleInPlatform = cabinAngle + windmillPhase;
+  const cabinX = eccCenterX + cabinDistance * Math.cos(cabinAngleInPlatform);
+  const cabinY = eccCenterY + cabinDistance * Math.sin(cabinAngleInPlatform);
   
   // Rotate to world frame by platform phase
   const cosPlat = Math.cos(platformPhase);
@@ -59,12 +63,12 @@ export function computeCabinPosition(
  * 
  * Velocity = d(position)/dt
  * 
- * @param cabinAngle - Angle of cabin on platform (rad)
- * @param cabinDistance - Distance from platform center (m)
+ * @param cabinAngle - Angle of cabin on windmill (rad) - fixed relative to windmill
+ * @param cabinDistance - Distance from eccentric center (m)
  * @param platformPhase - Current platform rotation phase (rad)
  * @param platformAngularVelocity - Platform angular velocity (rad/s)
- * @param eccentricPhase - Current eccentric rotation phase (rad)
- * @param eccentricAngularVelocity - Eccentric angular velocity (rad/s)
+ * @param windmillPhase - Current windmill rotation phase (rad)
+ * @param windmillAngularVelocity - Windmill angular velocity (rad/s)
  * @param eccentricRadius - Current eccentric radius (m)
  * @param eccentricRadiusVelocity - Rate of change of eccentric radius (m/s)
  * @returns 3D velocity vector
@@ -74,27 +78,33 @@ export function computeCabinVelocity(
   cabinDistance: number,
   platformPhase: number,
   platformAngularVelocity: number,
-  eccentricPhase: number,
-  eccentricAngularVelocity: number,
+  windmillPhase: number,
+  windmillAngularVelocity: number,
   eccentricRadius: number,
   eccentricRadiusVelocity: number
 ): Vector3D {
-  // Time derivatives in platform frame
-  const cosEcc = Math.cos(eccentricPhase);
-  const sinEcc = Math.sin(eccentricPhase);
+  // Eccentric center position in platform frame (fixed at angle 0)
+  const eccCenterX = eccentricRadius;
+  const eccCenterY = 0;
   
   // Derivative of eccentric center position in platform frame
-  // d/dt [r_ecc * (cos(θ_ecc), sin(θ_ecc))]
-  const deccCenterX = eccentricRadiusVelocity * cosEcc - eccentricRadius * eccentricAngularVelocity * sinEcc;
-  const deccCenterY = eccentricRadiusVelocity * sinEcc + eccentricRadius * eccentricAngularVelocity * cosEcc;
+  // d/dt [r_ecc, 0] = [dr_ecc/dt, 0]
+  const deccCenterX = eccentricRadiusVelocity;
+  const deccCenterY = 0;
+  
+  // Cabin angle in platform frame (windmill rotation adds to cabin angle)
+  const cabinAngleInPlatform = cabinAngle + windmillPhase;
+  const cosCabin = Math.cos(cabinAngleInPlatform);
+  const sinCabin = Math.sin(cabinAngleInPlatform);
   
   // Cabin position in platform frame (eccentric center + cabin offset)
-  const cabinX_plat = eccentricRadius * cosEcc + cabinDistance * Math.cos(cabinAngle);
-  const cabinY_plat = eccentricRadius * sinEcc + cabinDistance * Math.sin(cabinAngle);
+  const cabinX_plat = eccCenterX + cabinDistance * cosCabin;
+  const cabinY_plat = eccCenterY + cabinDistance * sinCabin;
   
   // Derivative of cabin position in platform frame
-  const dcabinX_plat = deccCenterX; // Cabin is fixed relative to eccentric
-  const dcabinY_plat = deccCenterY;
+  // d/dt [eccCenter + cabinDistance * (cos(cabinAngle + windmillPhase), sin(...))]
+  const dcabinX_plat = deccCenterX - cabinDistance * windmillAngularVelocity * sinCabin;
+  const dcabinY_plat = deccCenterY + cabinDistance * windmillAngularVelocity * cosCabin;
   
   // Transform to world frame: rotate by platform phase
   // World position = R(θ_plat) * platform_position
@@ -122,18 +132,18 @@ export function computeCabinVelocity(
  * Acceleration = d(velocity)/dt
  * Includes:
  * - Centripetal acceleration from platform rotation
- * - Centripetal acceleration from eccentric rotation
+ * - Centripetal acceleration from windmill rotation
  * - Coriolis effects
  * - Tangential acceleration from angular acceleration
  * 
- * @param cabinAngle - Angle of cabin on platform (rad)
- * @param cabinDistance - Distance from platform center (m)
+ * @param cabinAngle - Angle of cabin on windmill (rad) - fixed relative to windmill
+ * @param cabinDistance - Distance from eccentric center (m)
  * @param platformPhase - Current platform rotation phase (rad)
  * @param platformAngularVelocity - Platform angular velocity (rad/s)
  * @param platformAngularAcceleration - Platform angular acceleration (rad/s²)
- * @param eccentricPhase - Current eccentric rotation phase (rad)
- * @param eccentricAngularVelocity - Eccentric angular velocity (rad/s)
- * @param eccentricAngularAcceleration - Eccentric angular acceleration (rad/s²)
+ * @param windmillPhase - Current windmill rotation phase (rad)
+ * @param windmillAngularVelocity - Windmill angular velocity (rad/s)
+ * @param windmillAngularAcceleration - Windmill angular acceleration (rad/s²)
  * @param eccentricRadius - Current eccentric radius (m)
  * @param eccentricRadiusVelocity - Rate of change of eccentric radius (m/s)
  * @param eccentricRadiusAcceleration - Second derivative of eccentric radius (m/s²)
@@ -145,47 +155,47 @@ export function computeCabinAcceleration(
   platformPhase: number,
   platformAngularVelocity: number,
   platformAngularAcceleration: number,
-  eccentricPhase: number,
-  eccentricAngularVelocity: number,
-  eccentricAngularAcceleration: number,
+  windmillPhase: number,
+  windmillAngularVelocity: number,
+  windmillAngularAcceleration: number,
   eccentricRadius: number,
   eccentricRadiusVelocity: number,
   eccentricRadiusAcceleration: number
 ): Vector3D {
-  // This is the full second derivative calculation
-  // For now, we'll compute it numerically from velocity differences
-  // A full analytical solution would be more complex but more accurate
-  
-  // Compute acceleration components in platform frame first
-  const cosEcc = Math.cos(eccentricPhase);
-  const sinEcc = Math.sin(eccentricPhase);
-  
-  // Eccentric center position in platform frame
-  const eccX_plat = eccentricRadius * cosEcc;
-  const eccY_plat = eccentricRadius * sinEcc;
+  // Eccentric center position in platform frame (fixed at angle 0)
+  const eccX_plat = eccentricRadius;
+  const eccY_plat = 0;
   
   // Eccentric center velocity in platform frame
-  const eccVX_plat = eccentricRadiusVelocity * cosEcc - eccentricRadius * eccentricAngularVelocity * sinEcc;
-  const eccVY_plat = eccentricRadiusVelocity * sinEcc + eccentricRadius * eccentricAngularVelocity * cosEcc;
+  const eccVX_plat = eccentricRadiusVelocity;
+  const eccVY_plat = 0;
   
   // Eccentric center acceleration in platform frame
-  // d²/dt² [r_ecc * (cos(θ_ecc), sin(θ_ecc))]
-  const accEccX_plat = (eccentricRadiusAcceleration - eccentricRadius * eccentricAngularVelocity * eccentricAngularVelocity) * cosEcc
-    - (2 * eccentricRadiusVelocity * eccentricAngularVelocity + eccentricRadius * eccentricAngularAcceleration) * sinEcc;
-  const accEccY_plat = (eccentricRadiusAcceleration - eccentricRadius * eccentricAngularVelocity * eccentricAngularVelocity) * sinEcc
-    + (2 * eccentricRadiusVelocity * eccentricAngularVelocity + eccentricRadius * eccentricAngularAcceleration) * cosEcc;
+  // d²/dt² [r_ecc, 0] = [d²r_ecc/dt², 0]
+  const accEccX_plat = eccentricRadiusAcceleration;
+  const accEccY_plat = 0;
+  
+  // Cabin angle in platform frame (windmill rotation adds to cabin angle)
+  const cabinAngleInPlatform = cabinAngle + windmillPhase;
+  const cosCabin = Math.cos(cabinAngleInPlatform);
+  const sinCabin = Math.sin(cabinAngleInPlatform);
   
   // Cabin position in platform frame
-  const cabinX_plat = eccX_plat + cabinDistance * Math.cos(cabinAngle);
-  const cabinY_plat = eccY_plat + cabinDistance * Math.sin(cabinAngle);
+  const cabinX_plat = eccX_plat + cabinDistance * cosCabin;
+  const cabinY_plat = eccY_plat + cabinDistance * sinCabin;
   
-  // Cabin velocity in platform frame (same as eccentric since cabin is fixed to it)
-  const cabinVX_plat = eccVX_plat;
-  const cabinVY_plat = eccVY_plat;
+  // Cabin velocity in platform frame
+  const cabinVX_plat = eccVX_plat - cabinDistance * windmillAngularVelocity * sinCabin;
+  const cabinVY_plat = eccVY_plat + cabinDistance * windmillAngularVelocity * cosCabin;
   
   // Cabin acceleration in platform frame
-  const cabinAccX_plat = accEccX_plat;
-  const cabinAccY_plat = accEccY_plat;
+  // d²/dt² [eccCenter + cabinDistance * (cos(cabinAngle + windmillPhase), sin(...))]
+  const cabinAccX_plat = accEccX_plat 
+    - cabinDistance * windmillAngularVelocity * windmillAngularVelocity * cosCabin
+    - cabinDistance * windmillAngularAcceleration * sinCabin;
+  const cabinAccY_plat = accEccY_plat
+    - cabinDistance * windmillAngularVelocity * windmillAngularVelocity * sinCabin
+    + cabinDistance * windmillAngularAcceleration * cosCabin;
   
   // Transform to world frame: R(θ_plat) rotates platform frame to world frame
   // World acceleration = R(θ) * a_plat + 2*ω × (R(θ) * v_plat) + ω × (ω × (R(θ) * r_plat))
@@ -296,7 +306,7 @@ export function updateCabinPhysics(
     cabinAngle,
     cabinDistance,
     state.platformPhase,
-    state.eccentricPhase,
+    state.windmillPhase,
     state.eccentric.radius
   );
   
@@ -308,8 +318,8 @@ export function updateCabinPhysics(
     cabinDistance,
     state.platformPhase,
     state.platform.angularVelocity,
-    state.eccentricPhase,
-    state.eccentric.angularVelocity,
+    state.windmillPhase,
+    state.windmill.angularVelocity,
     state.eccentric.radius,
     eccentricRadiusVelocity
   );
@@ -318,7 +328,7 @@ export function updateCabinPhysics(
   // For now, assume angular accelerations and radius acceleration are zero
   // (These will be computed from ramping in the future)
   const platformAngularAcceleration = 0; // TODO: compute from ramping
-  const eccentricAngularAcceleration = 0; // TODO: compute from ramping
+  const windmillAngularAcceleration = 0; // TODO: compute from ramping
   const eccentricRadiusAcceleration = 0; // TODO: compute from ramping
   
   const acceleration = computeCabinAcceleration(
@@ -327,9 +337,9 @@ export function updateCabinPhysics(
     state.platformPhase,
     state.platform.angularVelocity,
     platformAngularAcceleration,
-    state.eccentricPhase,
-    state.eccentric.angularVelocity,
-    eccentricAngularAcceleration,
+    state.windmillPhase,
+    state.windmill.angularVelocity,
+    windmillAngularAcceleration,
     state.eccentric.radius,
     eccentricRadiusVelocity,
     eccentricRadiusAcceleration

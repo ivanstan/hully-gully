@@ -49,17 +49,25 @@ export interface PlatformParams {
 }
 
 /**
- * Eccentric (windmill) parameters
+ * Eccentric parameters
+ * Note: Eccentric rotates with the main platform (no independent rotation)
  */
 export interface EccentricParams {
-  /** Angular velocity of eccentric rotation (rad/s) */
-  angularVelocity: number;
-  /** Rotation direction */
-  direction: RotationDirection;
   /** Current eccentric radius (m) - distance from platform center to eccentric center */
   radius: number;
   /** Target radius (for hydraulic control) */
   targetRadius: number;
+}
+
+/**
+ * Windmill parameters (secondary platform: skirt + cabins)
+ * The windmill motor rotates the secondary platform around the skirt center
+ */
+export interface WindmillParams {
+  /** Angular velocity of windmill rotation (rad/s) */
+  angularVelocity: number;
+  /** Rotation direction */
+  direction: RotationDirection;
   /** Target angular velocity (for ramping) */
   targetAngularVelocity: number;
 }
@@ -98,10 +106,12 @@ export interface SimulationState {
   platform: PlatformParams;
   /** Eccentric parameters */
   eccentric: EccentricParams;
+  /** Windmill parameters (secondary platform) */
+  windmill: WindmillParams;
   /** Current phase angle of platform rotation (rad) */
   platformPhase: number;
-  /** Current phase angle of eccentric rotation (rad) */
-  eccentricPhase: number;
+  /** Current phase angle of windmill rotation (rad) - rotation around skirt center */
+  windmillPhase: number;
   /** Array of cabin states */
   cabins: CabinState[];
 }
@@ -113,14 +123,14 @@ export interface SimulationState {
 export interface OperatorControls {
   /** Target platform angular velocity (rad/s) */
   platformSpeed: number;
-  /** Target eccentric angular velocity (rad/s) */
-  eccentricSpeed: number;
+  /** Target windmill angular velocity (rad/s) */
+  windmillSpeed: number;
   /** Target eccentric radius (m) */
   eccentricRadius: number;
   /** Platform rotation direction */
   platformDirection: RotationDirection;
-  /** Eccentric rotation direction */
-  eccentricDirection: RotationDirection;
+  /** Windmill rotation direction */
+  windmillDirection: RotationDirection;
 }
 
 /**
@@ -129,8 +139,8 @@ export interface OperatorControls {
 export interface RampParams {
   /** Time constant for platform velocity ramping (s) */
   platformRampTime: number;
-  /** Time constant for eccentric velocity ramping (s) */
-  eccentricRampTime: number;
+  /** Time constant for windmill velocity ramping (s) */
+  windmillRampTime: number;
   /** Time constant for radius ramping (s) */
   radiusRampTime: number;
 }
@@ -161,9 +171,9 @@ export interface SimulationConfig {
 export interface DataPoint {
   time: number;
   platformPhase: number;
-  eccentricPhase: number;
+  windmillPhase: number;
   platformAngularVelocity: number;
-  eccentricAngularVelocity: number;
+  windmillAngularVelocity: number;
   eccentricRadius: number;
   cabinData: Array<{
     gForce: number;

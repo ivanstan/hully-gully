@@ -297,12 +297,16 @@ export class RenderingEngine {
     }
     
     // Update eccentric position and rotation
+    // Eccentric center is at a fixed angle (0) on the platform, rotates with platform
     if (this.eccentricMesh) {
-      // Position eccentric based on radius and phase
+      // Position eccentric based on radius (at angle 0 on platform)
       // Map physics (x, y) to Three.js (z, x) for Z-X plane
-      const eccX_physics = state.eccentric.radius * Math.cos(state.eccentricPhase);
-      const eccY_physics = state.eccentric.radius * Math.sin(state.eccentricPhase);
-      this.eccentricMesh.position.set(eccY_physics, 0.5, eccX_physics);
+      const eccX_physics = state.eccentric.radius; // At angle 0, so cos(0) = 1
+      const eccY_physics = 0; // sin(0) = 0
+      // Rotate by platform phase to get world position
+      const worldX = eccX_physics * Math.cos(state.platformPhase) - eccY_physics * Math.sin(state.platformPhase);
+      const worldY = eccX_physics * Math.sin(state.platformPhase) + eccY_physics * Math.cos(state.platformPhase);
+      this.eccentricMesh.position.set(worldY, 0.5, worldX);
       // Eccentric rotates with platform around Y-axis
       this.eccentricMesh.rotation.y = state.platformPhase;
     }
@@ -311,14 +315,16 @@ export class RenderingEngine {
     // Skirt and cabins rotate together as one system around Y-axis at skirt center
     if (this.windmillGroup) {
       // Position windmill group at eccentric center (skirt center)
-      // Map physics (x, y) to Three.js (z, x) for Z-X plane
-      const eccX_physics = state.eccentric.radius * Math.cos(state.eccentricPhase);
-      const eccY_physics = state.eccentric.radius * Math.sin(state.eccentricPhase);
-      this.windmillGroup.position.set(eccY_physics, 0, eccX_physics);
+      // Eccentric center in world coordinates (rotated by platform phase)
+      const eccX_physics = state.eccentric.radius;
+      const eccY_physics = 0;
+      const worldX = eccX_physics * Math.cos(state.platformPhase) - eccY_physics * Math.sin(state.platformPhase);
+      const worldY = eccX_physics * Math.sin(state.platformPhase) + eccY_physics * Math.cos(state.platformPhase);
+      this.windmillGroup.position.set(worldY, 0, worldX);
       
       // Rotate windmill group (skirt + cabins) around Y-axis at skirt center
-      // Platform rotation + eccentric rotation makes it rotate around its own center
-      this.windmillGroup.rotation.y = state.platformPhase + state.eccentricPhase;
+      // Windmill rotates around its own center (windmillPhase) and also rotates with platform
+      this.windmillGroup.rotation.y = state.platformPhase + state.windmillPhase;
     }
     
     // Update or create cabin meshes
@@ -342,18 +348,11 @@ export class RenderingEngine {
       const cabin = state.cabins[i];
       const mesh = this.cabinMeshes[i];
       
-      // Calculate cabin position in platform frame relative to platform center
-      // From physics: cabinX = eccCenterX + cabinDistance * cos(cabinAngle)
-      //               cabinY = eccCenterY + cabinDistance * sin(cabinAngle)
-      const eccX_physics = state.eccentric.radius * Math.cos(state.eccentricPhase);
-      const eccY_physics = state.eccentric.radius * Math.sin(state.eccentricPhase);
-      
-      const cabinX_plat = eccX_physics + cabin.distanceFromCenter * Math.cos(cabin.platformAngle);
-      const cabinY_plat = eccY_physics + cabin.distanceFromCenter * Math.sin(cabin.platformAngle);
-      
-      // Position relative to eccentric center (in platform frame)
-      const relX = cabinX_plat - eccX_physics;
-      const relY = cabinY_plat - eccY_physics;
+      // Calculate cabin position relative to eccentric center (in platform frame)
+      // Cabin angle is relative to windmill, so we add windmillPhase
+      const cabinAngleInPlatform = cabin.platformAngle + state.windmillPhase;
+      const relX = cabin.distanceFromCenter * Math.cos(cabinAngleInPlatform);
+      const relY = cabin.distanceFromCenter * Math.sin(cabinAngleInPlatform);
       
       // Set position relative to windmill group center
       // Map physics (x, y, z) to Three.js (y, z, x) for Z-X plane disc

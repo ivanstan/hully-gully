@@ -33,15 +33,15 @@ class BalerinaSimulator {
       maxEccentricRadius: 6, // meters
       ramping: {
         platformRampTime: 2.0, // seconds
-        eccentricRampTime: 2.0, // seconds
+        windmillRampTime: 2.0, // seconds
         radiusRampTime: 1.0 // seconds
       },
       initialControls: {
         platformSpeed: 0.5, // rad/s
-        eccentricSpeed: 1.0, // rad/s
+        windmillSpeed: 1.0, // rad/s
         eccentricRadius: 4, // meters
         platformDirection: RotationDirection.COUNTER_CLOCKWISE,
-        eccentricDirection: RotationDirection.COUNTER_CLOCKWISE
+        windmillDirection: RotationDirection.COUNTER_CLOCKWISE
       }
     };
     
@@ -70,7 +70,7 @@ class BalerinaSimulator {
           // Set all speeds to zero
           this.simulation.updateControls({
             platformSpeed: 0,
-            eccentricSpeed: 0
+            windmillSpeed: 0
           });
         },
         onReset: () => {

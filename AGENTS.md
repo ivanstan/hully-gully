@@ -5,8 +5,10 @@ Balerina / Hully Gully amusement ride.
 
 The system consists of:
 - a rotating main platform
-- a secondary rotating eccentric ("windmill")
-- a variable eccentric radius controlled by hydraulics
+- a secondary rotating platform ("windmill") consisting of skirt and cabins
+- The windmill motor rotates only the skirt and cabins around the skirt center (does not rotate the eccentric)
+- The secondary platform (skirt + cabins) also rotates together with the main platform
+- a variable eccentric radius controlled by hydraulics (separate from windmill rotation)
 - fixed cabins (no free rotation)
 - superposition of motions producing lateral acceleration and G-forces
 

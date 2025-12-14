@@ -77,14 +77,16 @@ export class SimulationEngine {
         targetAngularVelocity: this.config.initialControls.platformSpeed
       },
       eccentric: {
-        angularVelocity: this.config.initialControls.eccentricSpeed,
-        direction: this.config.initialControls.eccentricDirection,
         radius: this.config.initialControls.eccentricRadius,
-        targetRadius: this.config.initialControls.eccentricRadius,
-        targetAngularVelocity: this.config.initialControls.eccentricSpeed
+        targetRadius: this.config.initialControls.eccentricRadius
+      },
+      windmill: {
+        angularVelocity: this.config.initialControls.windmillSpeed,
+        direction: this.config.initialControls.windmillDirection,
+        targetAngularVelocity: this.config.initialControls.windmillSpeed
       },
       platformPhase: 0,
-      eccentricPhase: 0,
+      windmillPhase: 0,
       cabins
     };
   }
@@ -112,8 +114,8 @@ export class SimulationEngine {
     if (controls.platformSpeed !== undefined) {
       this.state.platform.targetAngularVelocity = controls.platformSpeed;
     }
-    if (controls.eccentricSpeed !== undefined) {
-      this.state.eccentric.targetAngularVelocity = controls.eccentricSpeed;
+    if (controls.windmillSpeed !== undefined) {
+      this.state.windmill.targetAngularVelocity = controls.windmillSpeed;
     }
     if (controls.eccentricRadius !== undefined) {
       // Clamp to valid range
@@ -126,8 +128,8 @@ export class SimulationEngine {
     if (controls.platformDirection !== undefined) {
       this.state.platform.direction = controls.platformDirection;
     }
-    if (controls.eccentricDirection !== undefined) {
-      this.state.eccentric.direction = controls.eccentricDirection;
+    if (controls.windmillDirection !== undefined) {
+      this.state.windmill.direction = controls.windmillDirection;
     }
   }
   
@@ -171,11 +173,11 @@ export class SimulationEngine {
       dt
     );
     
-    // Ramp eccentric angular velocity toward target
-    this.state.eccentric.angularVelocity = this.rampValue(
-      this.state.eccentric.angularVelocity,
-      this.state.eccentric.targetAngularVelocity * this.state.eccentric.direction,
-      this.config.ramping.eccentricRampTime,
+    // Ramp windmill angular velocity toward target
+    this.state.windmill.angularVelocity = this.rampValue(
+      this.state.windmill.angularVelocity,
+      this.state.windmill.targetAngularVelocity * this.state.windmill.direction,
+      this.config.ramping.windmillRampTime,
       dt
     );
     
@@ -189,16 +191,16 @@ export class SimulationEngine {
     
     // Update phases (integrate angular velocities)
     this.state.platformPhase += this.state.platform.angularVelocity * dt;
-    this.state.eccentricPhase += this.state.eccentric.angularVelocity * dt;
+    this.state.windmillPhase += this.state.windmill.angularVelocity * dt;
     
     // Normalize phases to [0, 2π)
     this.state.platformPhase = this.state.platformPhase % (2 * Math.PI);
     if (this.state.platformPhase < 0) {
       this.state.platformPhase += 2 * Math.PI;
     }
-    this.state.eccentricPhase = this.state.eccentricPhase % (2 * Math.PI);
-    if (this.state.eccentricPhase < 0) {
-      this.state.eccentricPhase += 2 * Math.PI;
+    this.state.windmillPhase = this.state.windmillPhase % (2 * Math.PI);
+    if (this.state.windmillPhase < 0) {
+      this.state.windmillPhase += 2 * Math.PI;
     }
     
     // Update cabin physics

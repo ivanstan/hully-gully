@@ -5,7 +5,7 @@
  * 
  * Controls:
  * - Platform motor speed and direction
- * - Windmill (eccentric) motor speed and direction
+ * - Windmill motor speed and direction (rotates secondary platform around skirt center)
  * - Eccentric radius (hydraulic control)
  * - Emergency stop
  */
@@ -325,7 +325,7 @@ export class ControlPanel {
    */
   private updateWindmillSpeed(speed: number): void {
     this.callbacks.onControlsChange({
-      eccentricSpeed: speed
+      windmillSpeed: speed
     });
   }
   
@@ -335,7 +335,7 @@ export class ControlPanel {
   private updateWindmillDirection(direction: RotationDirection): void {
     this.currentWindmillDirection = direction;
     this.callbacks.onControlsChange({
-      eccentricDirection: direction
+      windmillDirection: direction
     });
   }
   
@@ -394,19 +394,19 @@ export class ControlPanel {
     
     // Update windmill speed
     if (this.windmillSpeedInput) {
-      this.windmillSpeedInput.value = controls.eccentricSpeed.toString();
+      this.windmillSpeedInput.value = controls.windmillSpeed.toString();
       const speedValue = this.windmillSpeedInput.parentElement?.querySelector('.speed-value');
       if (speedValue) {
-        speedValue.textContent = controls.eccentricSpeed.toFixed(1) + ' rad/s';
+        speedValue.textContent = controls.windmillSpeed.toFixed(1) + ' rad/s';
       }
     }
     
     // Update windmill direction
-    if (controls.eccentricDirection !== this.currentWindmillDirection) {
-      this.currentWindmillDirection = controls.eccentricDirection;
+    if (controls.windmillDirection !== this.currentWindmillDirection) {
+      this.currentWindmillDirection = controls.windmillDirection;
       this.updateDirectionButtons(
         'windmill',
-        controls.eccentricDirection,
+        controls.windmillDirection,
         this.windmillDirectionCW,
         this.windmillDirectionCCW
       );
