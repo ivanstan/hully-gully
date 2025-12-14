@@ -308,17 +308,17 @@ export class RenderingEngine {
     }
     
     // Update windmill group position and rotation
-    // Skirt and cabins rotate together as one system around Y-axis
+    // Skirt and cabins rotate together as one system around Y-axis at skirt center
     if (this.windmillGroup) {
-      // Position windmill group at eccentric center
+      // Position windmill group at eccentric center (skirt center)
       // Map physics (x, y) to Three.js (z, x) for Z-X plane
       const eccX_physics = state.eccentric.radius * Math.cos(state.eccentricPhase);
       const eccY_physics = state.eccentric.radius * Math.sin(state.eccentricPhase);
       this.windmillGroup.position.set(eccY_physics, 0, eccX_physics);
       
-      // Rotate windmill group (skirt + cabins) around Y-axis with platform
-      // This makes the skirt and cabins rotate together as one system
-      this.windmillGroup.rotation.y = state.platformPhase;
+      // Rotate windmill group (skirt + cabins) around Y-axis at skirt center
+      // Platform rotation + eccentric rotation makes it rotate around its own center
+      this.windmillGroup.rotation.y = state.platformPhase + state.eccentricPhase;
     }
     
     // Update or create cabin meshes
