@@ -66,6 +66,7 @@ export class RenderingEngine {
   // Decorative elements
   private rideLights: THREE.PointLight[] = [];
   private lightBulbs: THREE.Mesh[] = [];
+  private lightColumns: THREE.Mesh[][] = [];  // 2D array: [column][bulb from top to bottom]
   
   // Legacy compatibility
   private platformMesh: THREE.Mesh | null = null;
@@ -704,59 +705,68 @@ export class RenderingEngine {
   }
   
   /**
-   * Create decorative point lights around the ride
-   * Positioned on the conical skirt surface
+   * Create decorative light columns along the radial dividers
+   * Each column has multiple bulbs that animate sequentially
    */
   private createRideLights(): void {
-    const numLights = 16;
+    const numColumns = 16;  // One column per divider
+    const bulbsPerColumn = 10;  // More bulbs, tighter spacing
     const innerRadius = 1.8;
     const outerRadius = this.windmillRadius;
     const innerHeight = 2.5;  // Match skirt cone height
     const outerHeight = 0.0;
     
-    // Position lights at ~80% of the way from center to edge
-    const lightRadiusFactor = 0.75;
-    const lightRadius = innerRadius + (outerRadius - innerRadius) * lightRadiusFactor;
-    const lightHeight = innerHeight + (outerHeight - innerHeight) * lightRadiusFactor;
+    // Stop lights at seat level (seats are at outerRadius - 0.8)
+    const seatRadius = outerRadius - 0.8;
+    const maxRadiusFactor = (seatRadius - innerRadius) / (outerRadius - innerRadius);  // ~0.9
     
-    // Emissive bulb material
-    const bulbMaterial = new THREE.MeshStandardMaterial({
-      color: 0xffeeaa,
-      emissive: 0xffaa44,
-      emissiveIntensity: 2.0,
-    });
+    // Store bulbs in 2D array for animation [column][bulb from top to bottom]
+    this.lightColumns = [];
     
-    for (let i = 0; i < numLights; i++) {
-      const angle = (i / numLights) * Math.PI * 2;
-      const x = Math.cos(angle) * lightRadius;
-      const y = Math.sin(angle) * lightRadius;
+    for (let col = 0; col < numColumns; col++) {
+      const angle = (col / numColumns) * Math.PI * 2;
+      const columnBulbs: THREE.Mesh[] = [];
       
-      // Light bulb geometry - positioned on conical surface
-      const bulbGeom = new THREE.SphereGeometry(0.15, 8, 8);
-      const bulb = new THREE.Mesh(bulbGeom, bulbMaterial);
-      bulb.position.set(x, y, lightHeight + 0.15);
-      this.windmillGroup!.add(bulb);
-      this.lightBulbs.push(bulb);
-      
-      // Point light (every other one to reduce performance impact)
-      if (i % 2 === 0) {
-        const light = new THREE.PointLight(0xffaa44, 0.3, 8, 2);
-        light.position.set(x, y, lightHeight + 0.3);
-        this.windmillGroup!.add(light);
-        this.rideLights.push(light);
+      for (let row = 0; row < bulbsPerColumn; row++) {
+        // Interpolate position from inner (top) to seat level (not all the way to outer)
+        const t = (row + 0.5) / bulbsPerColumn * maxRadiusFactor;  // Stop before outer edge
+        const radius = innerRadius + (outerRadius - innerRadius) * t;
+        const height = innerHeight + (outerHeight - innerHeight) * t;
+        
+        const x = Math.cos(angle) * radius;
+        const y = Math.sin(angle) * radius;
+        
+        // Create bulb with its own material (for individual control)
+        const bulbMaterial = new THREE.MeshStandardMaterial({
+          color: 0xffeeaa,
+          emissive: 0xffaa44,
+          emissiveIntensity: 0.3,  // Start dim
+        });
+        
+        // Smaller bulbs for tighter appearance
+        const bulbGeom = new THREE.SphereGeometry(0.1, 8, 8);
+        const bulb = new THREE.Mesh(bulbGeom, bulbMaterial);
+        bulb.position.set(x, y, height + 0.12);
+        
+        this.windmillGroup!.add(bulb);
+        this.lightBulbs.push(bulb);
+        columnBulbs.push(bulb);
       }
-    }
-    
-    // Hub lights - at the raised center
-    for (let i = 0; i < 4; i++) {
-      const angle = (i / 4) * Math.PI * 2;
-      const light = new THREE.PointLight(0x44aaff, 0.5, 10, 2);
+      
+      this.lightColumns.push(columnBulbs);
+      
+      // Add one point light per column (at middle of column)
+      const midT = 0.4 * maxRadiusFactor;
+      const midRadius = innerRadius + (outerRadius - innerRadius) * midT;
+      const midHeight = innerHeight + (outerHeight - innerHeight) * midT;
+      const light = new THREE.PointLight(0xffaa44, 0.4, 10, 2);
       light.position.set(
-        Math.cos(angle) * 1.2,
-        Math.sin(angle) * 1.2,
-        2.8  // Above the hub cap
+        Math.cos(angle) * midRadius,
+        Math.sin(angle) * midRadius,
+        midHeight + 0.3
       );
       this.windmillGroup!.add(light);
+      this.rideLights.push(light);
     }
   }
   
@@ -1053,13 +1063,41 @@ export class RenderingEngine {
       this.clearForceVectors();
     }
     
-    // Animate light bulbs (subtle pulsing)
+    // Animate light columns - sequential top to bottom pattern
     const time = state.time;
-    for (let i = 0; i < this.lightBulbs.length; i++) {
-      const bulb = this.lightBulbs[i];
-      const material = bulb.material as THREE.MeshStandardMaterial;
-      const pulse = 1.5 + 0.5 * Math.sin(time * 3 + i * 0.5);
-      material.emissiveIntensity = pulse;
+    const animSpeed = 1.2;  // Slower animation speed
+    const cycleDuration = 2.5;  // Longer cycle duration (seconds)
+    
+    for (let col = 0; col < this.lightColumns.length; col++) {
+      const column = this.lightColumns[col];
+      const numBulbs = column.length;
+      
+      // Calculate which bulb should be lit based on time
+      // Creates a cascading effect from top (0) to bottom (numBulbs-1)
+      const cycleProgress = ((time * animSpeed) % cycleDuration) / cycleDuration;  // 0 to 1
+      const activeBulbFloat = cycleProgress * (numBulbs + 1);  // Which bulb is currently "active"
+      
+      for (let row = 0; row < numBulbs; row++) {
+        const bulb = column[row];
+        const material = bulb.material as THREE.MeshStandardMaterial;
+        
+        // Calculate distance from the "active" position
+        const distance = Math.abs(row - activeBulbFloat);
+        
+        // Bulbs close to active position are bright, others are dim
+        // Creates a traveling "pulse" effect
+        const brightness = Math.max(0, 1 - distance * 0.5);
+        const intensity = 0.3 + brightness * 2.5;  // Range from 0.3 (dim) to 2.8 (bright)
+        
+        material.emissiveIntensity = intensity;
+        
+        // Also adjust color slightly - brighter bulbs are more yellow/white
+        if (brightness > 0.5) {
+          material.emissive.setHex(0xffdd66);  // Bright yellow-white
+        } else {
+          material.emissive.setHex(0xffaa44);  // Warm orange
+        }
+      }
     }
   }
   
