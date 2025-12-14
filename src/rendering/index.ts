@@ -245,7 +245,7 @@ export class RenderingEngine {
     const platformGeometry = new THREE.CylinderGeometry(10, 10, 0.5, 32);
     const platformMaterial = new THREE.MeshStandardMaterial({ color: 0x666666 });
     this.platformMesh = new THREE.Mesh(platformGeometry, platformMaterial);
-    this.platformMesh.rotation.x = Math.PI / 2; // Rotate to horizontal
+    this.platformMesh.rotation.y = Math.PI / 2; // Rotate to Z-X plane (vertical)
     this.platformMesh.receiveShadow = true;
     this.scene.add(this.platformMesh);
     
@@ -269,18 +269,20 @@ export class RenderingEngine {
    */
   update(state: SimulationState): void {
     // Update platform rotation
+    // Disc is in Z-X plane, rotates around Y-axis (vertical)
     if (this.platformMesh) {
-      this.platformMesh.rotation.z = state.platformPhase;
+      this.platformMesh.rotation.y = state.platformPhase;
     }
     
     // Update eccentric position and rotation
     if (this.eccentricMesh) {
       // Position eccentric based on radius and phase
-      const eccX = state.eccentric.radius * Math.cos(state.eccentricPhase);
-      const eccY = state.eccentric.radius * Math.sin(state.eccentricPhase);
-      this.eccentricMesh.position.set(eccX, eccY, 0.5);
-      // Eccentric rotates with platform
-      this.eccentricMesh.rotation.z = state.platformPhase;
+      // Map physics (x, y) to Three.js (z, x) for Z-X plane
+      const eccX_physics = state.eccentric.radius * Math.cos(state.eccentricPhase);
+      const eccY_physics = state.eccentric.radius * Math.sin(state.eccentricPhase);
+      this.eccentricMesh.position.set(eccY_physics, 0.5, eccX_physics);
+      // Eccentric rotates with platform around Y-axis
+      this.eccentricMesh.rotation.y = state.platformPhase;
     }
     
     // Update or create cabin meshes
@@ -299,10 +301,11 @@ export class RenderingEngine {
       const mesh = this.cabinMeshes[i];
       
       // Set position from simulation state
-      mesh.position.set(cabin.position.x, cabin.position.y, cabin.position.z + 1);
+      // Map physics (x, y, z) to Three.js (y, z, x) for Z-X plane disc
+      mesh.position.set(cabin.position.y, cabin.position.z + 1, cabin.position.x);
       
-      // Rotate with platform
-      mesh.rotation.z = state.platformPhase;
+      // Rotate with platform around Y-axis
+      mesh.rotation.y = state.platformPhase;
       
       // Optional: Color by G-force
       if (this.showGForceColors) {
@@ -333,16 +336,17 @@ export class RenderingEngine {
     
     // Create arrows for each cabin
     for (const cabin of cabins) {
+      // Map physics (x, y, z) to Three.js (y, z, x) for Z-X plane disc
       const direction = new THREE.Vector3(
-        cabin.acceleration.x,
         cabin.acceleration.y,
-        cabin.acceleration.z
+        cabin.acceleration.z,
+        cabin.acceleration.x
       ).normalize();
       
       const origin = new THREE.Vector3(
-        cabin.position.x,
         cabin.position.y,
-        cabin.position.z + 1
+        cabin.position.z + 1,
+        cabin.position.x
       );
       
       const length = cabin.totalAcceleration * 0.1; // Scale for visibility
@@ -397,12 +401,13 @@ export class RenderingEngine {
   setCabinView(cabinIndex: number, state: SimulationState): void {
     if (cabinIndex >= 0 && cabinIndex < state.cabins.length) {
       const cabin = state.cabins[cabinIndex];
+      // Map physics (x, y, z) to Three.js (y, z, x) for Z-X plane disc
       this.camera.position.set(
-        cabin.position.x,
-        cabin.position.y + 2,
-        cabin.position.z + 5
+        cabin.position.y,
+        cabin.position.z + 2,
+        cabin.position.x + 5
       );
-      this.controls.target.set(cabin.position.x, cabin.position.y, cabin.position.z);
+      this.controls.target.set(cabin.position.y, cabin.position.z, cabin.position.x);
       this.controls.update();
     }
   }
