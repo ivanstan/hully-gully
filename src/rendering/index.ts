@@ -15,6 +15,7 @@
  */
 
 import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { SimulationState, CabinState } from '../types/index.js';
 
 /**
@@ -26,6 +27,7 @@ export class RenderingEngine {
   private scene: THREE.Scene;
   private camera: THREE.PerspectiveCamera;
   private renderer: THREE.WebGLRenderer;
+  private controls: OrbitControls;
   private platformMesh: THREE.Mesh | null = null;
   private eccentricMesh: THREE.Mesh | null = null;
   private cabinMeshes: THREE.Mesh[] = [];
@@ -56,6 +58,13 @@ export class RenderingEngine {
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     container.appendChild(this.renderer.domElement);
+    
+    // Orbit controls for camera interaction
+    this.controls = new OrbitControls(this.camera, this.renderer.domElement);
+    this.controls.enableDamping = true; // Smooth camera movement
+    this.controls.dampingFactor = 0.05;
+    this.controls.target.set(0, 0, 0); // Look at the center of the scene
+    this.controls.update();
     
     // Lighting
     const ambientLight = new THREE.AmbientLight(0x404040, 0.6);
@@ -225,7 +234,8 @@ export class RenderingEngine {
    */
   setExternalView(): void {
     this.camera.position.set(0, 20, 20);
-    this.camera.lookAt(0, 0, 0);
+    this.controls.target.set(0, 0, 0);
+    this.controls.update();
   }
   
   /**
@@ -242,7 +252,8 @@ export class RenderingEngine {
         cabin.position.y + 2,
         cabin.position.z + 5
       );
-      this.camera.lookAt(cabin.position.x, cabin.position.y, cabin.position.z);
+      this.controls.target.set(cabin.position.x, cabin.position.y, cabin.position.z);
+      this.controls.update();
     }
   }
   
@@ -250,6 +261,8 @@ export class RenderingEngine {
    * Render the scene
    */
   render(): void {
+    // Update controls (required for damping)
+    this.controls.update();
     this.renderer.render(this.scene, this.camera);
   }
   
@@ -263,12 +276,14 @@ export class RenderingEngine {
     this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(width, height);
+    this.controls.update();
   }
   
   /**
    * Clean up resources
    */
   dispose(): void {
+    this.controls.dispose();
     this.renderer.dispose();
     // Additional cleanup would go here
   }
