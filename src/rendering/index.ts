@@ -101,14 +101,14 @@ export class RenderingEngine {
   }
   
   /**
-   * Create a Blender-style axis helper overlay in the bottom-left corner
+   * Create a Blender-style axis helper overlay in the bottom-right corner
    */
   private createBlenderStyleAxisHelper(container: HTMLElement): void {
     // Create container
     const helperContainer = document.createElement('div');
     helperContainer.style.position = 'absolute';
     helperContainer.style.bottom = '20px';
-    helperContainer.style.left = '20px';
+    helperContainer.style.right = '20px';
     helperContainer.style.width = '120px';
     helperContainer.style.height = '120px';
     helperContainer.style.backgroundColor = '#1a1a1a'; // Match scene background

@@ -7,12 +7,14 @@
  * - Simulation runs at fixed timestep (independent of rendering)
  * - Rendering runs at display refresh rate
  * - State is passed from simulation to rendering
+ * - Motor simulation provides realistic 3-phase electrical behavior
  */
 
 import { SimulationEngine } from './simulation/index.js';
 import { RenderingEngine } from './rendering/index.js';
-import { ControlPanel } from './ui/ControlPanel.js';
+import { MotorPanel } from './ui/MotorPanel.js';
 import { SimulationConfig, RotationDirection } from './types/index.js';
+import { MotorDirection } from './motors/types.js';
 
 /**
  * Main Application Class
@@ -20,10 +22,10 @@ import { SimulationConfig, RotationDirection } from './types/index.js';
 class BalerinaSimulator {
   private simulation: SimulationEngine;
   private rendering: RenderingEngine;
-  private controlPanel: ControlPanel | null = null;
+  private motorPanel: MotorPanel | null = null;
   private animationFrameId: number | null = null;
   
-  constructor(container: HTMLElement, controlPanelContainer?: HTMLElement) {
+  constructor(container: HTMLElement, motorPanelContainer?: HTMLElement) {
     // Create default simulation configuration
     // Main platform radius is 2/3 of secondary platform (windmill) radius
     const windmillRadius = 9; // meters (secondary platform radius)
@@ -76,26 +78,75 @@ class BalerinaSimulator {
       this.rendering.resize(w, h);
     });
     
-    // Create control panel if container provided
-    if (controlPanelContainer) {
-      this.controlPanel = new ControlPanel(controlPanelContainer, {
-        onControlsChange: (controls) => {
-          this.simulation.updateControls(controls);
+    // Create motor panel (main operator control panel) if container provided
+    if (motorPanelContainer) {
+      this.motorPanel = new MotorPanel(motorPanelContainer, {
+        onPlatformFrequencyChange: (frequency) => {
+          this.simulation.setPlatformMotorFrequency(frequency);
+        },
+        onWindmillFrequencyChange: (frequency) => {
+          this.simulation.setWindmillMotorFrequency(frequency);
+        },
+        onPlatformDirectionChange: (direction) => {
+          // Set motor direction via VFD (phase sequence swap)
+          this.simulation.setPlatformMotorDirection(direction);
+          // Also update the simulation's direction state for consistency
+          this.simulation.updateControls({
+            platformDirection: direction === MotorDirection.FORWARD 
+              ? RotationDirection.COUNTER_CLOCKWISE 
+              : RotationDirection.CLOCKWISE
+          });
+        },
+        onWindmillDirectionChange: (direction) => {
+          // Set motor direction via VFD (phase sequence swap)
+          this.simulation.setWindmillMotorDirection(direction);
+          // Also update the simulation's direction state for consistency
+          this.simulation.updateControls({
+            windmillDirection: direction === MotorDirection.FORWARD 
+              ? RotationDirection.COUNTER_CLOCKWISE 
+              : RotationDirection.CLOCKWISE
+          });
+        },
+        onHydraulicStart: () => {
+          this.simulation.startHydraulicMotor();
+        },
+        onHydraulicStop: () => {
+          this.simulation.stopHydraulicMotor();
+        },
+        onTiltChange: (angleDegrees) => {
+          const angleRad = angleDegrees * Math.PI / 180;
+          this.simulation.updateControls({ tiltAngle: angleRad });
+        },
+        onTiltUp: () => {
+          const state = this.simulation.getState();
+          const currentDeg = state.tilt.targetTiltAngle * 180 / Math.PI;
+          const newDeg = Math.min(30, currentDeg + 5);
+          this.simulation.updateControls({ tiltAngle: newDeg * Math.PI / 180 });
+        },
+        onTiltDown: () => {
+          const state = this.simulation.getState();
+          const currentDeg = state.tilt.targetTiltAngle * 180 / Math.PI;
+          const newDeg = Math.max(0, currentDeg - 5);
+          this.simulation.updateControls({ tiltAngle: newDeg * Math.PI / 180 });
         },
         onEmergencyStop: () => {
-          // Set all speeds to zero
+          this.simulation.emergencyStopMotors();
           this.simulation.updateControls({
             platformSpeed: 0,
             windmillSpeed: 0
           });
         },
-        onReset: () => {
-          this.reset();
+        onResetFaults: () => {
+          this.simulation.resetMotorFaults();
         }
       });
       
-      // Initialize control panel with initial values
-      this.controlPanel.updateFromState(config.initialControls);
+      // Start hydraulic motor by default (needed for tilt)
+      this.simulation.startHydraulicMotor();
+      
+      // Initialize tilt slider to initial value
+      const initialTiltDeg = config.initialControls.tiltAngle * 180 / Math.PI;
+      this.motorPanel.setTiltAngle(initialTiltDeg);
     }
   }
   
@@ -118,6 +169,30 @@ class BalerinaSimulator {
     // Update rendering from simulation state
     const state = this.simulation.getState();
     this.rendering.update(state);
+    
+    // Update motor panel if exists
+    if (this.motorPanel) {
+      this.motorPanel.update(
+        this.simulation.getPlatformMotorState(),
+        this.simulation.getWindmillMotorState(),
+        this.simulation.getHydraulicMotorState()
+      );
+      
+      // Update hydraulic system display
+      const hydraulicMotor = this.simulation.getHydraulicMotorState();
+      // Calculate simulated hydraulic values based on motor state
+      const motorRunning = hydraulicMotor.shaftSpeed > 1;
+      const pressure = motorRunning ? 120 + Math.sin(state.time * 2) * 10 : 0;
+      const cylinderPosition = state.tilt.tiltAngle / (Math.PI / 6); // Normalize to 0-1 (max 30°)
+      
+      this.motorPanel.updateHydraulics({
+        pressure: pressure,
+        cylinderPosition: Math.max(0, Math.min(1, cylinderPosition)),
+        oilTemperature: hydraulicMotor.temperature * 0.7 + 20, // Approximate oil temp
+        tiltAngle: state.tilt.tiltAngle * 180 / Math.PI,
+        targetTiltAngle: state.tilt.targetTiltAngle * 180 / Math.PI
+      });
+    }
     
     // Render frame
     this.rendering.render();
@@ -145,11 +220,17 @@ class BalerinaSimulator {
    */
   reset(): void {
     this.simulation.reset();
-    // Reset control panel to initial values
-    if (this.controlPanel) {
+    this.simulation.resetMotorFaults();
+    
+    // Reset motor panel frequencies and tilt
+    if (this.motorPanel) {
+      this.motorPanel.setFrequencies(0, 0);
       const config = this.simulation.getConfig();
-      this.controlPanel.updateFromState(config.initialControls);
+      this.motorPanel.setTiltAngle(config.initialControls.tiltAngle * 180 / Math.PI);
     }
+    
+    // Restart hydraulic motor
+    this.simulation.startHydraulicMotor();
   }
   
   /**
@@ -183,10 +264,13 @@ class BalerinaSimulator {
 if (typeof document !== 'undefined') {
   document.addEventListener('DOMContentLoaded', () => {
     const container = document.getElementById('simulator-container');
-    const controlPanelContainer = document.getElementById('control-panel');
+    const motorPanelContainer = document.getElementById('motor-panel');
     
     if (container) {
-      const simulator = new BalerinaSimulator(container, controlPanelContainer || undefined);
+      const simulator = new BalerinaSimulator(
+        container,
+        motorPanelContainer || undefined
+      );
       simulator.start();
       
       // Expose to global scope for debugging
