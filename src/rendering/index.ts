@@ -6,17 +6,42 @@
  * CRITICAL: This module contains NO physics logic.
  * It only maps simulation state to visual representation.
  * 
- * Responsibilities:
- * - 3D scene setup
- * - Camera management
- * - Object transforms from simulation state
- * - Force vector visualization (optional)
- * - G-force color mapping (optional)
+ * Features:
+ * - Detailed ride geometry (mast, arms, cabins, skirt)
+ * - PBR materials with metalness/roughness
+ * - Post-processing (bloom, SMAA)
+ * - Procedural environment map for reflections
+ * - Enhanced lighting (hemisphere, directional, point lights)
+ * - Decorative ride lights
  */
 
 import * as THREE from 'three';
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
+import { SMAAPass } from 'three/examples/jsm/postprocessing/SMAAPass.js';
+import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { SimulationState, CabinState } from '../types/index.js';
+
+/**
+ * Material presets for the ride
+ */
+interface MaterialSet {
+  platform: THREE.MeshStandardMaterial;
+  mast: THREE.MeshStandardMaterial;
+  mastAccent: THREE.MeshStandardMaterial;
+  arm: THREE.MeshStandardMaterial;
+  cabinBody: THREE.MeshStandardMaterial;
+  cabinAccent: THREE.MeshStandardMaterial;
+  cabinSeat: THREE.MeshStandardMaterial;
+  safetyBar: THREE.MeshStandardMaterial;
+  skirtPanelA: THREE.MeshStandardMaterial;
+  skirtPanelB: THREE.MeshStandardMaterial;
+  pivot: THREE.MeshStandardMaterial;
+  ground: THREE.MeshStandardMaterial;
+  chrome: THREE.MeshStandardMaterial;
+}
 
 /**
  * Rendering Engine Class
@@ -27,98 +52,842 @@ export class RenderingEngine {
   private scene: THREE.Scene;
   private camera: THREE.PerspectiveCamera;
   private renderer: THREE.WebGLRenderer;
+  private composer: EffectComposer;
   private controls: OrbitControls;
+  
+  // Main structures
+  private platformGroup: THREE.Group | null = null;
+  private mastGroup: THREE.Group | null = null;
+  private windmillGroup: THREE.Group | null = null;
+  private skirtGroup: THREE.Group | null = null;
+  private cabinGroups: THREE.Group[] = [];
+  private armMeshes: THREE.Mesh[] = [];
+  
+  // Decorative elements
+  private rideLights: THREE.PointLight[] = [];
+  private lightBulbs: THREE.Mesh[] = [];
+  
+  // Legacy compatibility
   private platformMesh: THREE.Mesh | null = null;
   private eccentricMesh: THREE.Mesh | null = null;
-  private windmillGroup: THREE.Group | null = null;
-  private skirtMesh: THREE.Mesh | null = null;
-  private cabinMeshes: THREE.Mesh[] = [];
+  
+  // Visualization options
   private forceArrows: THREE.ArrowHelper[] = [];
   private showForceVectors: boolean = false;
   private showGForceColors: boolean = false;
+  
+  // UI elements
   private axisHelperCanvas: HTMLCanvasElement | null = null;
   private axisHelperContainer: HTMLElement | null = null;
+  
+  // Configuration
   private platformRadius: number;
   private windmillRadius: number;
+  private materials: MaterialSet;
   
   /**
    * Create a new rendering engine
-   * 
-   * @param container - HTML element to render into
-   * @param width - Viewport width (pixels)
-   * @param height - Viewport height (pixels)
-   * @param platformRadius - Radius of main platform (m)
-   * @param windmillRadius - Radius of windmill/secondary platform (m)
    */
   constructor(container: HTMLElement, width: number, height: number, platformRadius: number, windmillRadius: number) {
     this.platformRadius = platformRadius;
     this.windmillRadius = windmillRadius;
+    
     // Scene setup
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x1a1a1a);
+    this.scene.background = new THREE.Color(0x0a0a15);
+    this.scene.fog = new THREE.Fog(0x0a0a15, 50, 150);
     
     // Camera setup
-    this.camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 1000);
-    this.camera.position.set(0, 20, 20);
-    this.camera.lookAt(0, 0, 0);
+    this.camera = new THREE.PerspectiveCamera(60, width / height, 0.1, 500);
+    this.camera.position.set(25, 18, 25);
+    this.camera.lookAt(0, 3, 0);
     
-    // Renderer setup
-    this.renderer = new THREE.WebGLRenderer({ antialias: true });
+    // Renderer setup with enhanced settings
+    this.renderer = new THREE.WebGLRenderer({ 
+      antialias: true,
+      powerPreference: 'high-performance'
+    });
     this.renderer.setSize(width, height);
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = 1.2;
     container.appendChild(this.renderer.domElement);
     
-    // Orbit controls for camera interaction
+    // Create materials first (needs environment map)
+    this.materials = this.createMaterials();
+    
+    // Create procedural environment map
+    this.createEnvironmentMap();
+    
+    // Setup post-processing
+    this.composer = this.setupPostProcessing(width, height);
+    
+    // Orbit controls
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
-    this.controls.enableDamping = true; // Smooth camera movement
+    this.controls.enableDamping = true;
     this.controls.dampingFactor = 0.05;
-    this.controls.target.set(0, 0, 0); // Look at the center of the scene
+    this.controls.target.set(0, 3, 0);
+    this.controls.minDistance = 10;
+    this.controls.maxDistance = 100;
+    this.controls.maxPolarAngle = Math.PI / 2 + 0.3;
     this.controls.update();
     
-    // Lighting
-    const ambientLight = new THREE.AmbientLight(0x404040, 0.6);
-    this.scene.add(ambientLight);
+    // Setup lighting
+    this.setupLighting();
     
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-    directionalLight.position.set(10, 20, 10);
-    directionalLight.castShadow = true;
-    this.scene.add(directionalLight);
+    // Create ground
+    this.createGround();
     
-    // Grid helper
-    const gridHelper = new THREE.GridHelper(50, 50, 0x444444, 0x222222);
-    this.scene.add(gridHelper);
-    
-    // Axes helper (commented out - can be enabled for debugging)
-    // const axesHelper = new THREE.AxesHelper(5);
-    // this.scene.add(axesHelper);
-    
-    // Create Blender-style axis helper overlay
+    // Create axis helper overlay
     this.createBlenderStyleAxisHelper(container);
     
-    // Initialize geometry
+    // Initialize ride geometry
     this.initializeGeometry();
+    
+    // Handle resize
+    window.addEventListener('resize', () => {
+      const w = container.clientWidth || 800;
+      const h = container.clientHeight || 600;
+      this.resize(w, h);
+    });
   }
   
   /**
-   * Create a Blender-style axis helper overlay in the bottom-right corner
+   * Create PBR materials for all ride components
+   */
+  private createMaterials(): MaterialSet {
+    return {
+      platform: new THREE.MeshStandardMaterial({
+        color: 0x444444,
+        metalness: 0.7,
+        roughness: 0.4,
+      }),
+      mast: new THREE.MeshStandardMaterial({
+        color: 0x666666,
+        metalness: 0.8,
+        roughness: 0.3,
+      }),
+      mastAccent: new THREE.MeshStandardMaterial({
+        color: 0xffcc00,
+        metalness: 0.3,
+        roughness: 0.5,
+        emissive: 0xffcc00,
+        emissiveIntensity: 0.1,
+      }),
+      arm: new THREE.MeshStandardMaterial({
+        color: 0x888888,
+        metalness: 0.9,
+        roughness: 0.2,
+      }),
+      cabinBody: new THREE.MeshStandardMaterial({
+        color: 0x2266cc,
+        metalness: 0.2,
+        roughness: 0.6,
+      }),
+      cabinAccent: new THREE.MeshStandardMaterial({
+        color: 0xffaa00,
+        metalness: 0.4,
+        roughness: 0.4,
+      }),
+      cabinSeat: new THREE.MeshStandardMaterial({
+        color: 0x222222,
+        metalness: 0.0,
+        roughness: 0.9,
+      }),
+      safetyBar: new THREE.MeshStandardMaterial({
+        color: 0xcccccc,
+        metalness: 1.0,
+        roughness: 0.1,
+      }),
+      skirtPanelA: new THREE.MeshStandardMaterial({
+        color: 0xff69b4,  // Hot pink
+        metalness: 0.2,
+        roughness: 0.5,
+        side: THREE.DoubleSide,
+      }),
+      skirtPanelB: new THREE.MeshStandardMaterial({
+        color: 0xff1493,  // Deep pink
+        metalness: 0.2,
+        roughness: 0.5,
+        side: THREE.DoubleSide,
+      }),
+      pivot: new THREE.MeshStandardMaterial({
+        color: 0xff4400,
+        metalness: 0.6,
+        roughness: 0.3,
+        emissive: 0xff4400,
+        emissiveIntensity: 0.2,
+      }),
+      ground: new THREE.MeshStandardMaterial({
+        color: 0x1a1a1a,
+        metalness: 0.0,
+        roughness: 0.95,
+      }),
+      chrome: new THREE.MeshStandardMaterial({
+        color: 0xffffff,
+        metalness: 1.0,
+        roughness: 0.05,
+      }),
+    };
+  }
+  
+  /**
+   * Create procedural environment map for reflections
+   */
+  private createEnvironmentMap(): void {
+    const pmremGenerator = new THREE.PMREMGenerator(this.renderer);
+    pmremGenerator.compileEquirectangularShader();
+    
+    // Create a simple gradient sky environment
+    const envScene = new THREE.Scene();
+    
+    // Sky gradient using a large sphere
+    const skyGeometry = new THREE.SphereGeometry(50, 32, 32);
+    const skyMaterial = new THREE.ShaderMaterial({
+      side: THREE.BackSide,
+      uniforms: {
+        topColor: { value: new THREE.Color(0x0a0a20) },
+        bottomColor: { value: new THREE.Color(0x1a1a30) },
+        offset: { value: 10 },
+        exponent: { value: 0.6 }
+      },
+      vertexShader: `
+        varying vec3 vWorldPosition;
+        void main() {
+          vec4 worldPosition = modelMatrix * vec4(position, 1.0);
+          vWorldPosition = worldPosition.xyz;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: `
+        uniform vec3 topColor;
+        uniform vec3 bottomColor;
+        uniform float offset;
+        uniform float exponent;
+        varying vec3 vWorldPosition;
+        void main() {
+          float h = normalize(vWorldPosition + offset).y;
+          gl_FragColor = vec4(mix(bottomColor, topColor, max(pow(max(h, 0.0), exponent), 0.0)), 1.0);
+        }
+      `
+    });
+    const sky = new THREE.Mesh(skyGeometry, skyMaterial);
+    envScene.add(sky);
+    
+    // Add some fake lights to the environment
+    const lightGeom = new THREE.SphereGeometry(2, 8, 8);
+    const lightMat = new THREE.MeshBasicMaterial({ color: 0xffffaa });
+    for (let i = 0; i < 6; i++) {
+      const light = new THREE.Mesh(lightGeom, lightMat);
+      const angle = (i / 6) * Math.PI * 2;
+      light.position.set(Math.cos(angle) * 30, 15 + Math.sin(angle * 2) * 5, Math.sin(angle) * 30);
+      envScene.add(light);
+    }
+    
+    const envMap = pmremGenerator.fromScene(envScene, 0.04).texture;
+    this.scene.environment = envMap;
+    
+    pmremGenerator.dispose();
+  }
+  
+  /**
+   * Setup post-processing pipeline
+   */
+  private setupPostProcessing(width: number, height: number): EffectComposer {
+    const composer = new EffectComposer(this.renderer);
+    
+    // Render pass
+    const renderPass = new RenderPass(this.scene, this.camera);
+    composer.addPass(renderPass);
+    
+    // Bloom pass for lights
+    const bloomPass = new UnrealBloomPass(
+      new THREE.Vector2(width, height),
+      0.4,    // strength
+      0.3,    // radius
+      0.9     // threshold
+    );
+    composer.addPass(bloomPass);
+    
+    // SMAA anti-aliasing
+    const smaaPass = new SMAAPass(width, height);
+    composer.addPass(smaaPass);
+    
+    // Output pass for correct color space
+    const outputPass = new OutputPass();
+    composer.addPass(outputPass);
+    
+    return composer;
+  }
+  
+  /**
+   * Setup scene lighting
+   */
+  private setupLighting(): void {
+    // Hemisphere light for natural ambient (sky/ground)
+    const hemiLight = new THREE.HemisphereLight(0x4466aa, 0x222222, 0.5);
+    hemiLight.position.set(0, 50, 0);
+    this.scene.add(hemiLight);
+    
+    // Main directional light (sun/key light)
+    const keyLight = new THREE.DirectionalLight(0xfff5e6, 1.2);
+    keyLight.position.set(20, 30, 15);
+    keyLight.castShadow = true;
+    keyLight.shadow.mapSize.width = 2048;
+    keyLight.shadow.mapSize.height = 2048;
+    keyLight.shadow.camera.near = 1;
+    keyLight.shadow.camera.far = 100;
+    keyLight.shadow.camera.left = -30;
+    keyLight.shadow.camera.right = 30;
+    keyLight.shadow.camera.top = 30;
+    keyLight.shadow.camera.bottom = -30;
+    keyLight.shadow.bias = -0.0001;
+    keyLight.shadow.normalBias = 0.02;
+    this.scene.add(keyLight);
+    
+    // Fill light (cooler, opposite side)
+    const fillLight = new THREE.DirectionalLight(0x6688cc, 0.4);
+    fillLight.position.set(-15, 20, -10);
+    this.scene.add(fillLight);
+    
+    // Rim light (back light for edge definition)
+    const rimLight = new THREE.DirectionalLight(0xffffcc, 0.3);
+    rimLight.position.set(-5, 10, -20);
+    this.scene.add(rimLight);
+    
+    // Ground bounce light
+    const bounceLight = new THREE.DirectionalLight(0x443322, 0.2);
+    bounceLight.position.set(0, -10, 0);
+    this.scene.add(bounceLight);
+  }
+  
+  /**
+   * Create ground plane with grid pattern
+   */
+  private createGround(): void {
+    // Main ground plane
+    const groundGeom = new THREE.PlaneGeometry(200, 200);
+    const ground = new THREE.Mesh(groundGeom, this.materials.ground);
+    ground.rotation.x = -Math.PI / 2;
+    ground.position.y = -0.05;
+    ground.receiveShadow = true;
+    this.scene.add(ground);
+    
+    // Circular pad under the ride
+    const padGeom = new THREE.CylinderGeometry(this.platformRadius + 3, this.platformRadius + 3, 0.1, 64);
+    const padMaterial = new THREE.MeshStandardMaterial({
+      color: 0x333333,
+      metalness: 0.3,
+      roughness: 0.7,
+    });
+    const pad = new THREE.Mesh(padGeom, padMaterial);
+    pad.position.y = 0;
+    pad.receiveShadow = true;
+    this.scene.add(pad);
+    
+    // Grid helper (subtle)
+    const gridHelper = new THREE.GridHelper(100, 50, 0x222233, 0x111122);
+    gridHelper.position.y = 0.01;
+    this.scene.add(gridHelper);
+  }
+  
+  /**
+   * Initialize all ride geometry
+   */
+  private initializeGeometry(): void {
+    this.createPlatform();
+    // Mast removed - was too prominent/lighthouse-like
+    this.createPivotMarker();
+    this.createWindmillGroup();
+  }
+  
+  /**
+   * Create the main rotating platform
+   */
+  private createPlatform(): void {
+    this.platformGroup = new THREE.Group();
+    
+    // Main platform disc
+    const platformGeom = new THREE.CylinderGeometry(
+      this.platformRadius, 
+      this.platformRadius + 0.3, 
+      0.6, 
+      64
+    );
+    this.platformMesh = new THREE.Mesh(platformGeom, this.materials.platform);
+    this.platformMesh.castShadow = true;
+    this.platformMesh.receiveShadow = true;
+    this.platformGroup.add(this.platformMesh);
+    
+    // Platform edge trim
+    const trimGeom = new THREE.TorusGeometry(this.platformRadius, 0.15, 8, 64);
+    const trim = new THREE.Mesh(trimGeom, this.materials.chrome);
+    trim.rotation.x = Math.PI / 2;
+    trim.position.y = 0.3;
+    this.platformGroup.add(trim);
+    
+    // Decorative floor pattern (concentric rings)
+    for (let r = 1; r < this.platformRadius; r += 2) {
+      const ringGeom = new THREE.TorusGeometry(r, 0.03, 4, 64);
+      const ring = new THREE.Mesh(ringGeom, this.materials.mastAccent);
+      ring.rotation.x = Math.PI / 2;
+      ring.position.y = 0.31;
+      this.platformGroup.add(ring);
+    }
+    
+    this.scene.add(this.platformGroup);
+  }
+  
+  /**
+   * Create the central mast/column structure
+   */
+  private createMast(): void {
+    this.mastGroup = new THREE.Group();
+    
+    // Main mast cylinder
+    const mastHeight = 6;
+    const mastGeom = new THREE.CylinderGeometry(0.8, 1.2, mastHeight, 16);
+    const mast = new THREE.Mesh(mastGeom, this.materials.mast);
+    mast.position.y = mastHeight / 2;
+    mast.castShadow = true;
+    this.mastGroup.add(mast);
+    
+    // Mast base (flared)
+    const baseGeom = new THREE.CylinderGeometry(1.2, 1.8, 1, 16);
+    const base = new THREE.Mesh(baseGeom, this.materials.mast);
+    base.position.y = 0.5;
+    base.castShadow = true;
+    this.mastGroup.add(base);
+    
+    // Decorative rings on mast
+    for (let y = 1; y <= 5; y++) {
+      const ringGeom = new THREE.TorusGeometry(0.85 + (1.2 - 0.8) * (1 - y / mastHeight) * 0.5, 0.08, 8, 32);
+      const ring = new THREE.Mesh(ringGeom, this.materials.mastAccent);
+      ring.rotation.x = Math.PI / 2;
+      ring.position.y = y;
+      this.mastGroup.add(ring);
+    }
+    
+    // Top cap
+    const capGeom = new THREE.SphereGeometry(0.6, 16, 16, 0, Math.PI * 2, 0, Math.PI / 2);
+    const cap = new THREE.Mesh(capGeom, this.materials.chrome);
+    cap.position.y = mastHeight;
+    this.mastGroup.add(cap);
+    
+    this.scene.add(this.mastGroup);
+  }
+  
+  /**
+   * Create pivot point marker
+   */
+  private createPivotMarker(): void {
+    const pivotGroup = new THREE.Group();
+    
+    // Pivot base
+    const pivotGeom = new THREE.CylinderGeometry(0.5, 0.7, 0.8, 16);
+    this.eccentricMesh = new THREE.Mesh(pivotGeom, this.materials.pivot);
+    this.eccentricMesh.castShadow = true;
+    pivotGroup.add(this.eccentricMesh);
+    
+    // Pivot axle (vertical)
+    const axleGeom = new THREE.CylinderGeometry(0.2, 0.2, 2, 8);
+    const axle = new THREE.Mesh(axleGeom, this.materials.chrome);
+    axle.position.y = 1;
+    pivotGroup.add(axle);
+    
+    this.scene.add(pivotGroup);
+  }
+  
+  /**
+   * Create the windmill group (skirt + cabins + arms)
+   */
+  private createWindmillGroup(): void {
+    this.windmillGroup = new THREE.Group();
+    
+    // Create decorative skirt
+    this.skirtGroup = this.createSkirt();
+    this.windmillGroup.add(this.skirtGroup);
+    
+    // Create hub at center (raised to match conical skirt center)
+    const hubGeom = new THREE.CylinderGeometry(1.5, 1.8, 2.0, 16);
+    const hub = new THREE.Mesh(hubGeom, this.materials.mast);
+    hub.position.z = 1.5;  // Raise to match inner skirt height (2.5)
+    hub.castShadow = true;
+    this.windmillGroup.add(hub);
+    
+    // Hub cap
+    const hubCapGeom = new THREE.ConeGeometry(1.5, 0.8, 16);
+    const hubCap = new THREE.Mesh(hubCapGeom, this.materials.chrome);
+    hubCap.position.z = 2.7;
+    hubCap.rotation.x = Math.PI;  // Point cone upward
+    this.windmillGroup.add(hubCap);
+    
+    // Create decorative lights on the skirt
+    this.createRideLights();
+    
+    // Create seats around the rim (part of windmill group so they rotate together)
+    this.createSeatsOnRim();
+    
+    this.scene.add(this.windmillGroup);
+  }
+  
+  /**
+   * Create seats positioned around the rim of the skirt
+   * Seats are children of windmillGroup so they rotate with the skirt
+   */
+  private createSeatsOnRim(): void {
+    const numSeats = 16;  // 2 per slice (8 slices * 2, or match numCabins)
+    const outerRadius = this.windmillRadius;
+    const seatRadius = outerRadius - 0.8;  // Slightly inward from outer edge
+    
+    // Seats positioned at outer edge height (cone bottom)
+    const seatHeight = 0.2;  // Just above the outer rim
+    
+    for (let i = 0; i < numSeats; i++) {
+      const angle = (i / numSeats) * Math.PI * 2;
+      
+      const seat = this.createSeat(i);
+      
+      // Position in local windmill coordinates (X-Y plane, Z is up)
+      seat.position.set(
+        Math.cos(angle) * seatRadius,
+        Math.sin(angle) * seatRadius,
+        seatHeight
+      );
+      
+      // Rotate seat to face outward (away from center)
+      seat.rotation.z = angle + Math.PI / 2;
+      
+      this.windmillGroup!.add(seat);
+      this.cabinGroups.push(seat);
+    }
+  }
+  
+  /**
+   * Create a single seat for the rim
+   */
+  private createSeat(index: number): THREE.Group {
+    const seat = new THREE.Group();
+    
+    // Seat colors
+    const seatColors = [
+      0xff3333, // Red (seat 0 - tracker)
+      0x3366ff, // Blue
+      0x33cc33, // Green
+      0xffcc00, // Yellow
+      0xff66cc, // Pink
+      0x00cccc, // Cyan
+      0xff6600, // Orange
+      0x9933ff, // Purple
+    ];
+    
+    const seatMaterial = new THREE.MeshStandardMaterial({
+      color: seatColors[index % seatColors.length],
+      metalness: 0.1,
+      roughness: 0.7,
+    });
+    
+    // Seat cushion
+    const cushionGeom = new THREE.BoxGeometry(0.6, 0.5, 0.15);
+    const cushion = new THREE.Mesh(cushionGeom, seatMaterial);
+    cushion.position.set(0, 0, 0.1);
+    cushion.castShadow = true;
+    seat.add(cushion);
+    
+    // Seat back
+    const backGeom = new THREE.BoxGeometry(0.6, 0.1, 0.7);
+    const back = new THREE.Mesh(backGeom, seatMaterial);
+    back.position.set(0, -0.25, 0.45);
+    back.castShadow = true;
+    seat.add(back);
+    
+    // Safety bar
+    const barGeom = new THREE.CylinderGeometry(0.03, 0.03, 0.5, 8);
+    const bar = new THREE.Mesh(barGeom, this.materials.safetyBar);
+    bar.rotation.x = Math.PI / 2;
+    bar.position.set(0, 0.25, 0.35);
+    seat.add(bar);
+    
+    // Bar supports
+    const supportGeom = new THREE.CylinderGeometry(0.025, 0.025, 0.3, 8);
+    const supportL = new THREE.Mesh(supportGeom, this.materials.chrome);
+    supportL.position.set(-0.2, 0.2, 0.2);
+    seat.add(supportL);
+    
+    const supportR = new THREE.Mesh(supportGeom, this.materials.chrome);
+    supportR.position.set(0.2, 0.2, 0.2);
+    seat.add(supportR);
+    
+    return seat;
+  }
+  
+  /**
+   * Create decorative skirt with alternating colored panels
+   * Conical shape: higher at center, lower at edges
+   * Has thickness (not just a flat surface)
+   */
+  private createSkirt(): THREE.Group {
+    const skirt = new THREE.Group();
+    const segments = 16;
+    const innerRadius = 1.8;
+    const outerRadius = this.windmillRadius;
+    
+    // Conical parameters
+    const thickness = 0.4;           // Thickness of the skirt
+    const innerHeight = 2.5;         // Height at inner edge (higher) - more conical
+    const outerHeight = 0.0;         // Height at outer edge (lower, creates cone)
+    
+    for (let i = 0; i < segments; i++) {
+      const angle1 = (i / segments) * Math.PI * 2;
+      const angle2 = ((i + 1) / segments) * Math.PI * 2;
+      
+      // Create 3D wedge panel using BufferGeometry
+      // Each panel has 8 vertices (4 on top surface, 4 on bottom surface)
+      const vertices = new Float32Array([
+        // Top surface (conical - inner is higher)
+        // Inner edge, angle1
+        Math.cos(angle1) * innerRadius, Math.sin(angle1) * innerRadius, innerHeight,
+        // Outer edge, angle1
+        Math.cos(angle1) * outerRadius, Math.sin(angle1) * outerRadius, outerHeight,
+        // Outer edge, angle2
+        Math.cos(angle2) * outerRadius, Math.sin(angle2) * outerRadius, outerHeight,
+        // Inner edge, angle2
+        Math.cos(angle2) * innerRadius, Math.sin(angle2) * innerRadius, innerHeight,
+        
+        // Bottom surface (flat, below top)
+        // Inner edge, angle1
+        Math.cos(angle1) * innerRadius, Math.sin(angle1) * innerRadius, innerHeight - thickness,
+        // Outer edge, angle1
+        Math.cos(angle1) * outerRadius, Math.sin(angle1) * outerRadius, outerHeight - thickness,
+        // Outer edge, angle2
+        Math.cos(angle2) * outerRadius, Math.sin(angle2) * outerRadius, outerHeight - thickness,
+        // Inner edge, angle2
+        Math.cos(angle2) * innerRadius, Math.sin(angle2) * innerRadius, innerHeight - thickness,
+      ]);
+      
+      // Indices for triangles (6 faces: top, bottom, 4 sides)
+      const indices = [
+        // Top face
+        0, 1, 2,  0, 2, 3,
+        // Bottom face (reversed winding)
+        4, 6, 5,  4, 7, 6,
+        // Outer edge (side)
+        1, 5, 6,  1, 6, 2,
+        // Inner edge (side)
+        0, 3, 7,  0, 7, 4,
+        // Side 1 (angle1)
+        0, 4, 5,  0, 5, 1,
+        // Side 2 (angle2)
+        3, 2, 6,  3, 6, 7,
+      ];
+      
+      const panelGeom = new THREE.BufferGeometry();
+      panelGeom.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
+      panelGeom.setIndex(indices);
+      panelGeom.computeVertexNormals();
+      
+      const material = i % 2 === 0 ? this.materials.skirtPanelA : this.materials.skirtPanelB;
+      const panel = new THREE.Mesh(panelGeom, material);
+      panel.castShadow = true;
+      panel.receiveShadow = true;
+      skirt.add(panel);
+      
+      // Add radial divider lines on top surface (following the cone slope)
+      const dividerLength = Math.sqrt(
+        Math.pow(outerRadius - innerRadius, 2) + Math.pow(innerHeight - outerHeight, 2)
+      );
+      const dividerGeom = new THREE.CylinderGeometry(0.04, 0.04, dividerLength, 6);
+      const divider = new THREE.Mesh(dividerGeom, this.materials.chrome);
+      
+      // Position at midpoint of the radial line
+      const midRadius = (innerRadius + outerRadius) / 2;
+      const midHeight = (innerHeight + outerHeight) / 2;
+      divider.position.set(
+        Math.cos(angle1) * midRadius,
+        Math.sin(angle1) * midRadius,
+        midHeight
+      );
+      
+      // Rotate to align with the sloped surface
+      const slopeAngle = Math.atan2(innerHeight - outerHeight, outerRadius - innerRadius);
+      divider.rotation.z = angle1 + Math.PI / 2;
+      divider.rotation.x = Math.PI / 2 - slopeAngle;
+      skirt.add(divider);
+    }
+    
+    // Outer trim ring (at the lower edge)
+    const outerTrimGeom = new THREE.TorusGeometry(outerRadius, 0.12, 8, 64);
+    const outerTrim = new THREE.Mesh(outerTrimGeom, this.materials.chrome);
+    outerTrim.position.z = outerHeight - thickness / 2;
+    skirt.add(outerTrim);
+    
+    // Inner trim ring (at the higher edge)
+    const innerTrimGeom = new THREE.TorusGeometry(innerRadius, 0.1, 8, 32);
+    const innerTrim = new THREE.Mesh(innerTrimGeom, this.materials.chrome);
+    innerTrim.position.z = innerHeight - thickness / 2;
+    skirt.add(innerTrim);
+    
+    // Top edge highlight ring (at inner edge, on top surface)
+    const topRingGeom = new THREE.TorusGeometry(innerRadius + 0.05, 0.05, 6, 32);
+    const topRing = new THREE.Mesh(topRingGeom, this.materials.chrome);
+    topRing.position.z = innerHeight + 0.02;
+    skirt.add(topRing);
+    
+    return skirt;
+  }
+  
+  /**
+   * Create decorative point lights around the ride
+   * Positioned on the conical skirt surface
+   */
+  private createRideLights(): void {
+    const numLights = 16;
+    const innerRadius = 1.8;
+    const outerRadius = this.windmillRadius;
+    const innerHeight = 2.5;  // Match skirt cone height
+    const outerHeight = 0.0;
+    
+    // Position lights at ~80% of the way from center to edge
+    const lightRadiusFactor = 0.75;
+    const lightRadius = innerRadius + (outerRadius - innerRadius) * lightRadiusFactor;
+    const lightHeight = innerHeight + (outerHeight - innerHeight) * lightRadiusFactor;
+    
+    // Emissive bulb material
+    const bulbMaterial = new THREE.MeshStandardMaterial({
+      color: 0xffeeaa,
+      emissive: 0xffaa44,
+      emissiveIntensity: 2.0,
+    });
+    
+    for (let i = 0; i < numLights; i++) {
+      const angle = (i / numLights) * Math.PI * 2;
+      const x = Math.cos(angle) * lightRadius;
+      const y = Math.sin(angle) * lightRadius;
+      
+      // Light bulb geometry - positioned on conical surface
+      const bulbGeom = new THREE.SphereGeometry(0.15, 8, 8);
+      const bulb = new THREE.Mesh(bulbGeom, bulbMaterial);
+      bulb.position.set(x, y, lightHeight + 0.15);
+      this.windmillGroup!.add(bulb);
+      this.lightBulbs.push(bulb);
+      
+      // Point light (every other one to reduce performance impact)
+      if (i % 2 === 0) {
+        const light = new THREE.PointLight(0xffaa44, 0.3, 8, 2);
+        light.position.set(x, y, lightHeight + 0.3);
+        this.windmillGroup!.add(light);
+        this.rideLights.push(light);
+      }
+    }
+    
+    // Hub lights - at the raised center
+    for (let i = 0; i < 4; i++) {
+      const angle = (i / 4) * Math.PI * 2;
+      const light = new THREE.PointLight(0x44aaff, 0.5, 10, 2);
+      light.position.set(
+        Math.cos(angle) * 1.2,
+        Math.sin(angle) * 1.2,
+        2.8  // Above the hub cap
+      );
+      this.windmillGroup!.add(light);
+    }
+  }
+  
+  /**
+   * Create a rim-mounted seat (simpler than full cabin)
+   * Seats are positioned along the outer edge of the skirt
+   */
+  private createCabin(index: number): THREE.Group {
+    const seat = new THREE.Group();
+    
+    // Seat colors - alternate or use index
+    const seatColors = [
+      0xff3333, // Red (seat 0 - tracker)
+      0x3366ff, // Blue
+      0x33cc33, // Green
+      0xffcc00, // Yellow
+      0xff66cc, // Pink
+      0x00cccc, // Cyan
+      0xff6600, // Orange
+      0x9933ff, // Purple
+    ];
+    
+    const seatMaterial = new THREE.MeshStandardMaterial({
+      color: seatColors[index % seatColors.length],
+      metalness: 0.1,
+      roughness: 0.7,
+    });
+    
+    // Seat base (the actual seat cushion)
+    const seatCushionGeom = new THREE.BoxGeometry(0.6, 0.15, 0.5);
+    const seatCushion = new THREE.Mesh(seatCushionGeom, seatMaterial);
+    seatCushion.position.set(0, 0.1, 0);
+    seatCushion.castShadow = true;
+    seat.add(seatCushion);
+    
+    // Seat back
+    const backGeom = new THREE.BoxGeometry(0.6, 0.7, 0.1);
+    const back = new THREE.Mesh(backGeom, seatMaterial);
+    back.position.set(0, 0.45, -0.2);
+    back.castShadow = true;
+    seat.add(back);
+    
+    // Safety bar (simple lap bar)
+    const barGeom = new THREE.CylinderGeometry(0.03, 0.03, 0.5, 8);
+    const bar = new THREE.Mesh(barGeom, this.materials.safetyBar);
+    bar.rotation.z = Math.PI / 2;
+    bar.position.set(0, 0.35, 0.2);
+    seat.add(bar);
+    
+    // Bar supports (left and right)
+    const supportGeom = new THREE.CylinderGeometry(0.025, 0.025, 0.25, 8);
+    const supportL = new THREE.Mesh(supportGeom, this.materials.chrome);
+    supportL.position.set(-0.25, 0.25, 0.2);
+    seat.add(supportL);
+    
+    const supportR = new THREE.Mesh(supportGeom, this.materials.chrome);
+    supportR.position.set(0.25, 0.25, 0.2);
+    seat.add(supportR);
+    
+    // Mounting bracket (connects seat to skirt)
+    const bracketGeom = new THREE.BoxGeometry(0.5, 0.08, 0.3);
+    const bracket = new THREE.Mesh(bracketGeom, this.materials.chrome);
+    bracket.position.set(0, 0, -0.1);
+    seat.add(bracket);
+    
+    return seat;
+  }
+  
+  /**
+   * Create structural arm/spoke connecting seat to center hub
+   */
+  private createArm(length: number): THREE.Mesh {
+    // Thinner spoke for rim-mounted seats
+    const armGeom = new THREE.CylinderGeometry(0.06, 0.06, length, 6);
+    const arm = new THREE.Mesh(armGeom, this.materials.arm);
+    arm.castShadow = true;
+    return arm;
+  }
+  
+  /**
+   * Create Blender-style axis helper overlay
    */
   private createBlenderStyleAxisHelper(container: HTMLElement): void {
-    // Create container
     const helperContainer = document.createElement('div');
     helperContainer.style.position = 'absolute';
     helperContainer.style.bottom = '20px';
     helperContainer.style.right = '20px';
     helperContainer.style.width = '120px';
     helperContainer.style.height = '120px';
-    helperContainer.style.backgroundColor = '#1a1a1a'; // Match scene background
+    helperContainer.style.backgroundColor = 'rgba(10, 10, 21, 0.8)';
     helperContainer.style.border = '1px solid rgba(255, 255, 255, 0.2)';
-    helperContainer.style.borderRadius = '5px';
+    helperContainer.style.borderRadius = '8px';
     helperContainer.style.padding = '10px';
     helperContainer.style.pointerEvents = 'none';
     helperContainer.style.zIndex = '1000';
     
-    // Create canvas for drawing
     const canvas = document.createElement('canvas');
     canvas.width = 100;
     canvas.height = 100;
@@ -131,7 +900,7 @@ export class RenderingEngine {
   }
   
   /**
-   * Update the Blender-style axis helper based on camera orientation
+   * Update Blender-style axis helper
    */
   private updateBlenderStyleAxisHelper(): void {
     if (!this.axisHelperCanvas) return;
@@ -141,66 +910,52 @@ export class RenderingEngine {
     const center = size / 2;
     const axisLength = 35;
     
-    // Clear canvas
     ctx.clearRect(0, 0, size, size);
     
-    // Get camera's world direction vectors
     const right = new THREE.Vector3();
     right.setFromMatrixColumn(this.camera.matrixWorld, 0);
     const up = new THREE.Vector3();
     up.setFromMatrixColumn(this.camera.matrixWorld, 1);
-    const forward = new THREE.Vector3();
-    forward.setFromMatrixColumn(this.camera.matrixWorld, 2);
     
-    // Project world axes onto camera's view plane
-    // X axis (red) - world X projected onto camera's right/up plane
     const worldX = new THREE.Vector3(1, 0, 0);
     const xScreenX = worldX.dot(right) * axisLength;
-    const xScreenY = -worldX.dot(up) * axisLength; // Negative because screen Y is inverted
+    const xScreenY = -worldX.dot(up) * axisLength;
     
-    // Y axis (green) - world Y projected onto camera's right/up plane
     const worldY = new THREE.Vector3(0, 1, 0);
     const yScreenX = worldY.dot(right) * axisLength;
     const yScreenY = -worldY.dot(up) * axisLength;
     
-    // Z axis (blue) - world Z projected onto camera's right/up plane
     const worldZ = new THREE.Vector3(0, 0, 1);
     const zScreenX = worldZ.dot(right) * axisLength;
     const zScreenY = -worldZ.dot(up) * axisLength;
     
-    // Prettier colors - brighter and more vibrant
-    const xColor = '#ff6b6b'; // Coral red
-    const yColor = '#51cf66'; // Bright green
-    const zColor = '#4dabf7'; // Sky blue
+    const xColor = '#ff6b6b';
+    const yColor = '#51cf66';
+    const zColor = '#4dabf7';
     
-    // Draw X axis (coral red)
-    ctx.strokeStyle = xColor;
+    // Draw axes
     ctx.lineWidth = 3;
+    
+    ctx.strokeStyle = xColor;
     ctx.beginPath();
     ctx.moveTo(center, center);
     ctx.lineTo(center + xScreenX, center + xScreenY);
     ctx.stroke();
-    // Arrow head
     this.drawArrowHead(ctx, center, center, center + xScreenX, center + xScreenY, xColor);
-    // Label
     ctx.fillStyle = xColor;
     ctx.font = 'bold 14px Arial';
     ctx.textAlign = 'center';
     ctx.fillText('X', center + xScreenX * 1.3, center + xScreenY * 1.3);
     
-    // Draw Y axis (bright green)
     ctx.strokeStyle = yColor;
     ctx.beginPath();
     ctx.moveTo(center, center);
     ctx.lineTo(center + yScreenX, center + yScreenY);
     ctx.stroke();
-    // Arrow head
     this.drawArrowHead(ctx, center, center, center + yScreenX, center + yScreenY, yColor);
-    // Label
     ctx.fillStyle = yColor;
     ctx.fillText('Y', center + yScreenX * 1.3, center + yScreenY * 1.3);
     
-    // Draw Z axis (sky blue)
     ctx.strokeStyle = zColor;
     ctx.setLineDash([3, 3]);
     ctx.beginPath();
@@ -208,22 +963,18 @@ export class RenderingEngine {
     ctx.lineTo(center + zScreenX, center + zScreenY);
     ctx.stroke();
     ctx.setLineDash([]);
-    // Arrow head
     this.drawArrowHead(ctx, center, center, center + zScreenX, center + zScreenY, zColor);
-    // Label
     ctx.fillStyle = zColor;
     ctx.fillText('Z', center + zScreenX * 1.3, center + zScreenY * 1.3);
   }
   
   /**
-   * Draw an arrow head at the end of a line
+   * Draw arrow head
    */
   private drawArrowHead(
     ctx: CanvasRenderingContext2D,
-    x1: number,
-    y1: number,
-    x2: number,
-    y2: number,
+    x1: number, y1: number,
+    x2: number, y2: number,
     color: string
   ): void {
     const angle = Math.atan2(y2 - y1, x2 - x1);
@@ -246,188 +997,87 @@ export class RenderingEngine {
   }
   
   /**
-   * Initialize 3D geometry for platform, eccentric, and cabins
-   */
-  private initializeGeometry(): void {
-    // Platform (main rotating disc)
-    const platformGeometry = new THREE.CylinderGeometry(this.platformRadius, this.platformRadius, 0.5, 32);
-    const platformMaterial = new THREE.MeshStandardMaterial({ color: 0x666666 });
-    this.platformMesh = new THREE.Mesh(platformGeometry, platformMaterial);
-    this.platformMesh.rotation.y = Math.PI / 2; // Rotate to Z-X plane (vertical)
-    this.platformMesh.receiveShadow = true;
-    this.scene.add(this.platformMesh);
-    
-    // Eccentric (windmill) - will be positioned dynamically
-    const eccentricGeometry = new THREE.BoxGeometry(2, 2, 0.3);
-    const eccentricMaterial = new THREE.MeshStandardMaterial({ color: 0xff6600 });
-    this.eccentricMesh = new THREE.Mesh(eccentricGeometry, eccentricMaterial);
-    this.eccentricMesh.castShadow = true;
-    this.scene.add(this.eccentricMesh);
-    
-    // Create windmill group (skirt + cabins) - they rotate together as one system
-    this.windmillGroup = new THREE.Group();
-    this.scene.add(this.windmillGroup);
-    
-    // Skirt (semi-transparent disc)
-    // CircleGeometry creates a circle in X-Y plane facing +Z
-    // The group quaternion will handle all rotations (tilt + platform + windmill)
-    const skirtGeometry = new THREE.CircleGeometry(this.windmillRadius, 32);
-    const skirtMaterial = new THREE.MeshStandardMaterial({ 
-      color: 0xffaa00,
-      transparent: true,
-      opacity: 0.4,
-      side: THREE.DoubleSide
-    });
-    this.skirtMesh = new THREE.Mesh(skirtGeometry, skirtMaterial);
-    // No rotation here - the group quaternion handles orientation
-    this.skirtMesh.position.y = 0; // Centered in the group
-    this.skirtMesh.receiveShadow = true;
-    this.windmillGroup.add(this.skirtMesh);
-    
-    // Cabins will be created dynamically based on simulation state and added to windmillGroup
-    // Skirt and cabins rotate together around Y-axis as one system
-  }
-  
-  /**
    * Update visualization from simulation state
-   * 
-   * This is the ONLY way simulation state affects rendering.
-   * No physics calculations happen here.
-   * 
-   * Coordinate mapping:
-   * - Physics: X-Y horizontal plane, Z vertical (up)
-   * - Three.js: X-Z horizontal plane, Y vertical (up)
-   * - Mapping: physics (x, y, z) → Three.js (x, z, y)
-   * 
-   * @param state - Current simulation state
    */
   update(state: SimulationState): void {
     // Update platform rotation
-    // Platform rotates around Y-axis (vertical in Three.js)
-    if (this.platformMesh) {
-      this.platformMesh.rotation.y = state.platformPhase;
+    if (this.platformGroup) {
+      this.platformGroup.rotation.y = state.platformPhase;
     }
     
-    // Calculate pivot point position in world coordinates
-    // Pivot is at the edge of the primary platform (at angle 0 in platform frame)
+    // Calculate pivot point in world coordinates
     const pivotX_physics = state.tilt.pivotRadius;
-    const pivotY_physics = 0;
-    // Rotate by platform phase to get world position
-    const pivotWorldX = pivotX_physics * Math.cos(state.platformPhase) - pivotY_physics * Math.sin(state.platformPhase);
-    const pivotWorldY = pivotX_physics * Math.sin(state.platformPhase) + pivotY_physics * Math.cos(state.platformPhase);
+    const pivotWorldX = pivotX_physics * Math.cos(state.platformPhase);
+    const pivotWorldY = pivotX_physics * Math.sin(state.platformPhase);
     
-    // Update pivot marker (using eccentricMesh as pivot visualization)
+    // Update pivot marker
     if (this.eccentricMesh) {
-      // Map physics (x, y) to Three.js (x, z)
-      this.eccentricMesh.position.set(pivotWorldX, 0.3, pivotWorldY);
-      this.eccentricMesh.rotation.y = state.platformPhase;
+      this.eccentricMesh.parent!.position.set(pivotWorldX, 0.4, pivotWorldY);
+      this.eccentricMesh.parent!.rotation.y = state.platformPhase;
     }
     
-    // Calculate secondary platform center position
-    // Center is at offset from pivot, tilted by tiltAngle
-    // The secondary platform extends INWARD (over primary platform), so offset is negative
+    // Calculate secondary platform center
     const tiltAngle = state.tilt.tiltAngle;
     const offset = state.tilt.secondaryPlatformOffset;
     
-    // In platform frame, the offset is along -x (toward center) with tilt
-    const centerOffsetX_plat = -offset * Math.cos(tiltAngle); // Negative = toward center
-    const centerOffsetZ_plat = offset * Math.sin(tiltAngle); // Vertical offset (up)
+    const centerOffsetX_plat = -offset * Math.cos(tiltAngle);
+    const centerOffsetZ_plat = offset * Math.sin(tiltAngle);
     
-    // Secondary platform center in platform frame
     const centerX_plat = state.tilt.pivotRadius + centerOffsetX_plat;
     const centerY_plat = 0;
     const centerZ_plat = centerOffsetZ_plat;
     
-    // Rotate to world frame
     const centerWorldX = centerX_plat * Math.cos(state.platformPhase) - centerY_plat * Math.sin(state.platformPhase);
     const centerWorldY = centerX_plat * Math.sin(state.platformPhase) + centerY_plat * Math.cos(state.platformPhase);
     const centerWorldZ = centerZ_plat;
     
-    // Update windmill group position and rotation
+    // Update windmill group
     if (this.windmillGroup) {
-      // Position windmill group at secondary platform center
-      // Map physics (x, y, z) to Three.js (x, z, y)
       this.windmillGroup.position.set(centerWorldX, centerWorldZ + 0.5, centerWorldY);
       
-      // The CircleGeometry is in X-Y plane, facing +Z
-      // We need to orient it to match the physics disc orientation
-      
-      // In physics, the disc normal after tilt (in platform frame) is:
-      //   normal_x = sin(tiltAngle)  (tilts toward pivot, which is in +X direction in platform frame)
-      //   normal_y = 0
-      //   normal_z = cos(tiltAngle)  (mostly up)
-      // After platform rotation about Z, in world frame:
-      //   world_normal_x = sin(tiltAngle) * cos(platformPhase)
-      //   world_normal_y = sin(tiltAngle) * sin(platformPhase)
-      //   world_normal_z = cos(tiltAngle)
-      
-      // Map to Three.js: physics (x,y,z) -> Three.js (x,z,y)
       const discNormal = new THREE.Vector3(
         Math.sin(tiltAngle) * Math.cos(state.platformPhase),
         Math.cos(tiltAngle),
         Math.sin(tiltAngle) * Math.sin(state.platformPhase)
       ).normalize();
       
-      // Step 1: Rotate the circle from facing +Z to facing +Y (lay it flat)
       const layFlatQuaternion = new THREE.Quaternion().setFromAxisAngle(
         new THREE.Vector3(1, 0, 0),
         -Math.PI / 2
       );
       
-      // Step 2: Rotate so the disc faces the computed normal direction
-      // This rotates +Y to discNormal
       const orientQuaternion = new THREE.Quaternion().setFromUnitVectors(
         new THREE.Vector3(0, 1, 0),
         discNormal
       );
       
-      // Step 3: Windmill rotation about the disc's normal axis
       const windmillQuaternion = new THREE.Quaternion().setFromAxisAngle(
         discNormal,
         state.windmillPhase + state.platformPhase
       );
       
-      // Combine: lay flat, then orient to tilt, then spin
-      // Apply in order: layFlat first (rightmost), then orient, then windmill
       this.windmillGroup.quaternion.copy(windmillQuaternion)
         .multiply(orientQuaternion)
         .multiply(layFlatQuaternion);
     }
     
-    // Update or create cabin meshes
-    while (this.cabinMeshes.length < state.cabins.length) {
-      const cabinIndex = this.cabinMeshes.length;
-      const cabinGeometry = new THREE.BoxGeometry(1.5, 1.5, 2);
-      // Make cabin 0 red for tracking, others blue
-      const cabinColor = cabinIndex === 0 ? 0xff3333 : 0x00aaff;
-      const cabinMaterial = new THREE.MeshStandardMaterial({ color: cabinColor });
-      const cabinMesh = new THREE.Mesh(cabinGeometry, cabinMaterial);
-      cabinMesh.castShadow = true;
-      // Add cabins to scene directly (not to windmill group) for accurate positioning
-      this.scene.add(cabinMesh);
-      this.cabinMeshes.push(cabinMesh);
-    }
-    
-    // Update cabin positions from physics (world coordinates)
-    for (let i = 0; i < state.cabins.length; i++) {
-      const cabin = state.cabins[i];
-      const mesh = this.cabinMeshes[i];
-      
-      // Use physics-computed world position directly
-      // Map physics (x, y, z) to Three.js (x, z, y)
-      mesh.position.set(cabin.position.x, cabin.position.z + 1, cabin.position.y);
-      
-      // Cabins are fixed - no rotation around their own axis
-      // They maintain a constant orientation in world space
-      mesh.rotation.set(0, 0, 0);
-      
-      // Optional: Color by G-force (skip for cabin 0 to keep it red for tracking)
-      if (this.showGForceColors && i !== 0) {
-        const material = mesh.material as THREE.MeshStandardMaterial;
-        const gForce = cabin.gForce;
-        // Color mapping: green (low) -> yellow -> red (high)
-        const hue = Math.max(0, Math.min(120 - gForce * 30, 120)) / 360;
-        material.color.setHSL(hue, 1, 0.5);
+    // Seats are now part of windmillGroup and rotate automatically with it
+    // Only update G-force coloring if enabled
+    if (this.showGForceColors && state.cabins.length > 0) {
+      for (let i = 0; i < Math.min(this.cabinGroups.length, state.cabins.length); i++) {
+        const cabin = state.cabins[i];
+        const cabinGroup = this.cabinGroups[i];
+        
+        // Skip seat 0 to keep it as tracker (red)
+        if (i !== 0) {
+          const cushion = cabinGroup.children[0] as THREE.Mesh;
+          if (cushion && cushion.material) {
+            const material = cushion.material as THREE.MeshStandardMaterial;
+            const gForce = cabin.gForce;
+            const hue = Math.max(0, Math.min(120 - gForce * 30, 120)) / 360;
+            material.color.setHSL(hue, 0.8, 0.5);
+          }
+        }
       }
     }
     
@@ -437,20 +1087,24 @@ export class RenderingEngine {
     } else {
       this.clearForceVectors();
     }
+    
+    // Animate light bulbs (subtle pulsing)
+    const time = state.time;
+    for (let i = 0; i < this.lightBulbs.length; i++) {
+      const bulb = this.lightBulbs[i];
+      const material = bulb.material as THREE.MeshStandardMaterial;
+      const pulse = 1.5 + 0.5 * Math.sin(time * 3 + i * 0.5);
+      material.emissiveIntensity = pulse;
+    }
   }
   
   /**
    * Update force vector visualization
-   * 
-   * @param cabins - Array of cabin states
    */
   private updateForceVectors(cabins: CabinState[]): void {
-    // Clear existing arrows
     this.clearForceVectors();
     
-    // Create arrows for each cabin
     for (const cabin of cabins) {
-      // Map physics (x, y, z) to Three.js (x, z, y)
       const direction = new THREE.Vector3(
         cabin.acceleration.x,
         cabin.acceleration.z,
@@ -459,21 +1113,25 @@ export class RenderingEngine {
       
       const origin = new THREE.Vector3(
         cabin.position.x,
-        cabin.position.z + 1,
+        cabin.position.z + 1.5,
         cabin.position.y
       );
       
-      const length = cabin.totalAcceleration * 0.1; // Scale for visibility
-      const color = 0xff0000;
+      const length = cabin.totalAcceleration * 0.1;
+      const color = new THREE.Color().setHSL(
+        Math.max(0, 0.33 - cabin.gForce * 0.1),
+        1,
+        0.5
+      );
       
-      const arrow = new THREE.ArrowHelper(direction, origin, length, color);
+      const arrow = new THREE.ArrowHelper(direction, origin, length, color.getHex(), 0.3, 0.15);
       this.scene.add(arrow);
       this.forceArrows.push(arrow);
     }
   }
   
   /**
-   * Clear all force vector arrows
+   * Clear force vector arrows
    */
   private clearForceVectors(): void {
     for (const arrow of this.forceArrows) {
@@ -498,57 +1156,49 @@ export class RenderingEngine {
   }
   
   /**
-   * Set camera position for external observer view
+   * Set external observer camera view
    */
   setExternalView(): void {
-    this.camera.position.set(0, 20, 20);
-    this.controls.target.set(0, 0, 0);
+    this.camera.position.set(25, 18, 25);
+    this.controls.target.set(0, 3, 0);
     this.controls.update();
   }
   
   /**
-   * Set camera to follow a specific cabin
-   * 
-   * @param cabinIndex - Index of cabin to follow
-   * @param state - Current simulation state
+   * Set camera to follow a cabin
    */
   setCabinView(cabinIndex: number, state: SimulationState): void {
     if (cabinIndex >= 0 && cabinIndex < state.cabins.length) {
       const cabin = state.cabins[cabinIndex];
-      // Map physics (x, y, z) to Three.js (x, z, y)
       this.camera.position.set(
         cabin.position.x + 5,
-        cabin.position.z + 2,
+        cabin.position.z + 3,
         cabin.position.y
       );
-      this.controls.target.set(cabin.position.x, cabin.position.z, cabin.position.y);
+      this.controls.target.set(cabin.position.x, cabin.position.z + 1, cabin.position.y);
       this.controls.update();
     }
   }
   
   /**
-   * Render the scene
+   * Render the scene with post-processing
    */
   render(): void {
-    // Update controls (required for damping)
     this.controls.update();
-    
-    // Update Blender-style axis helper
     this.updateBlenderStyleAxisHelper();
     
-    this.renderer.render(this.scene, this.camera);
+    // Use composer for post-processing
+    this.composer.render();
   }
   
   /**
    * Handle window resize
-   * 
-   * @param width - New width (pixels)
-   * @param height - New height (pixels)
    */
   resize(width: number, height: number): void {
     this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(width, height);
+    this.composer.setSize(width, height);
     this.controls.update();
   }
   
@@ -559,9 +1209,18 @@ export class RenderingEngine {
     if (this.axisHelperContainer && this.axisHelperContainer.parentElement) {
       this.axisHelperContainer.parentElement.removeChild(this.axisHelperContainer);
     }
+    
+    // Dispose materials
+    Object.values(this.materials).forEach(mat => mat.dispose());
+    
+    // Dispose lights
+    this.rideLights.forEach(light => {
+      this.scene.remove(light);
+      light.dispose();
+    });
+    
     this.controls.dispose();
+    this.composer.dispose();
     this.renderer.dispose();
-    // Additional cleanup would go here
   }
 }
-
