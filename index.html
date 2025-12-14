@@ -293,12 +293,12 @@
             <span class="value" id="platform-omega">0.00 rad/s</span>
         </div>
         <div class="stat">
-            <span class="label">Eccentric ω:</span>
-            <span class="value" id="eccentric-omega">0.00 rad/s</span>
+            <span class="label">Windmill ω:</span>
+            <span class="value" id="windmill-omega">0.00 rad/s</span>
         </div>
         <div class="stat">
-            <span class="label">Eccentric R:</span>
-            <span class="value" id="eccentric-radius">0.00 m</span>
+            <span class="label">Tilt Angle:</span>
+            <span class="value" id="tilt-angle">0.0°</span>
         </div>
         <div class="stat">
             <span class="label">Max G-Force:</span>
@@ -318,8 +318,8 @@
                 document.getElementById('status').textContent = 'Running';
                 document.getElementById('time').textContent = state.time.toFixed(2) + ' s';
                 document.getElementById('platform-omega').textContent = state.platform.angularVelocity.toFixed(2) + ' rad/s';
-                document.getElementById('eccentric-omega').textContent = state.windmill.angularVelocity.toFixed(2) + ' rad/s';
-                document.getElementById('eccentric-radius').textContent = state.eccentric.radius.toFixed(2) + ' m';
+                document.getElementById('windmill-omega').textContent = state.windmill.angularVelocity.toFixed(2) + ' rad/s';
+                document.getElementById('tilt-angle').textContent = (state.tilt.tiltAngle * 180 / Math.PI).toFixed(1) + '°';
                 
                 const maxGForce = Math.max(...state.cabins.map(c => c.gForce));
                 document.getElementById('max-gforce').textContent = maxGForce.toFixed(2) + ' g';

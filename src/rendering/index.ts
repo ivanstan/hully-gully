@@ -268,7 +268,9 @@ export class RenderingEngine {
     this.windmillGroup = new THREE.Group();
     this.scene.add(this.windmillGroup);
     
-    // Skirt (semi-transparent disc, flat in X-Z plane)
+    // Skirt (semi-transparent disc)
+    // CircleGeometry creates a circle in X-Y plane facing +Z
+    // The group quaternion will handle all rotations (tilt + platform + windmill)
     const skirtGeometry = new THREE.CircleGeometry(this.windmillRadius, 32);
     const skirtMaterial = new THREE.MeshStandardMaterial({ 
       color: 0xffaa00,
@@ -277,9 +279,8 @@ export class RenderingEngine {
       side: THREE.DoubleSide
     });
     this.skirtMesh = new THREE.Mesh(skirtGeometry, skirtMaterial);
-    // Rotate to X-Z plane: CircleGeometry is in X-Y plane by default, rotate around X axis
-    this.skirtMesh.rotation.x = -Math.PI / 2; // Rotate to X-Z plane (vertical)
-    this.skirtMesh.position.y = 0.6; // Slightly above the main platform
+    // No rotation here - the group quaternion handles orientation
+    this.skirtMesh.position.y = 0; // Centered in the group
     this.skirtMesh.receiveShadow = true;
     this.windmillGroup.add(this.skirtMesh);
     
@@ -348,30 +349,49 @@ export class RenderingEngine {
       // Map physics (x, y, z) to Three.js (x, z, y)
       this.windmillGroup.position.set(centerWorldX, centerWorldZ + 0.5, centerWorldY);
       
-      // The windmill group needs complex rotation:
-      // 1. Tilt about the pivot axis (which is perpendicular to radial direction)
-      // 2. Rotate around its own axis (windmill phase)
-      // 3. Rotate with platform
+      // The CircleGeometry is in X-Y plane, facing +Z
+      // We need to orient it to match the physics disc orientation
       
-      // Reset rotation and apply in order
-      this.windmillGroup.rotation.set(0, 0, 0);
+      // In physics, the disc normal after tilt (in platform frame) is:
+      //   normal_x = sin(tiltAngle)  (tilts toward pivot, which is in +X direction in platform frame)
+      //   normal_y = 0
+      //   normal_z = cos(tiltAngle)  (mostly up)
+      // After platform rotation about Z, in world frame:
+      //   world_normal_x = sin(tiltAngle) * cos(platformPhase)
+      //   world_normal_y = sin(tiltAngle) * sin(platformPhase)
+      //   world_normal_z = cos(tiltAngle)
       
-      // First: apply windmill rotation (around local Y-axis, which is normal to disc)
-      // But since the disc is tilted, we need to handle this carefully
+      // Map to Three.js: physics (x,y,z) -> Three.js (x,z,y)
+      const discNormal = new THREE.Vector3(
+        Math.sin(tiltAngle) * Math.cos(state.platformPhase),
+        Math.cos(tiltAngle),
+        Math.sin(tiltAngle) * Math.sin(state.platformPhase)
+      ).normalize();
       
-      // The tilt axis is perpendicular to the radial direction in the platform frame
-      // In platform frame at angle 0, radial is along +X, so tilt axis is along +Y
-      // After platform rotation, tilt axis rotates with platform
+      // Step 1: Rotate the circle from facing +Z to facing +Y (lay it flat)
+      const layFlatQuaternion = new THREE.Quaternion().setFromAxisAngle(
+        new THREE.Vector3(1, 0, 0),
+        -Math.PI / 2
+      );
       
-      // Apply platform rotation first
-      this.windmillGroup.rotation.y = state.platformPhase + state.windmillPhase;
+      // Step 2: Rotate so the disc faces the computed normal direction
+      // This rotates +Y to discNormal
+      const orientQuaternion = new THREE.Quaternion().setFromUnitVectors(
+        new THREE.Vector3(0, 1, 0),
+        discNormal
+      );
       
-      // Apply tilt rotation about the pivot axis (perpendicular to radial direction)
-      // The tilt angle is at T between line to primary center and line to secondary center
-      // The inner edge (toward primary center) rises, pivot edge stays level
-      // Pivot axis in world frame: perpendicular to radial direction
-      this.windmillGroup.rotation.x = tiltAngle * Math.cos(state.platformPhase + Math.PI/2);
-      this.windmillGroup.rotation.z = tiltAngle * Math.sin(state.platformPhase + Math.PI/2);
+      // Step 3: Windmill rotation about the disc's normal axis
+      const windmillQuaternion = new THREE.Quaternion().setFromAxisAngle(
+        discNormal,
+        state.windmillPhase + state.platformPhase
+      );
+      
+      // Combine: lay flat, then orient to tilt, then spin
+      // Apply in order: layFlat first (rightmost), then orient, then windmill
+      this.windmillGroup.quaternion.copy(windmillQuaternion)
+        .multiply(orientQuaternion)
+        .multiply(layFlatQuaternion);
     }
     
     // Update or create cabin meshes
