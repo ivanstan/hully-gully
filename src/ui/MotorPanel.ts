@@ -97,6 +97,13 @@ export class MotorPanel {
   private tiltSlider!: HTMLInputElement;
   private tiltUpBtn!: HTMLButtonElement;
   private tiltDownBtn!: HTMLButtonElement;
+  private tiltControlsSection!: HTMLElement;
+  
+  // Hydraulic system has sufficient pressure for tilt operation
+  private hydraulicPressureOk: boolean = false;
+  
+  // Minimum pressure required for tilt operation (bar)
+  private static readonly MIN_TILT_PRESSURE = 100;
   
   constructor(container: HTMLElement, callbacks: MotorPanelCallbacks) {
     this.container = container;
@@ -111,22 +118,33 @@ export class MotorPanel {
     this.container.innerHTML = '';
     this.container.className = 'motor-panel';
     
-    // Panel title
+    // Header row: title + power summary + emergency stop
+    const headerRow = document.createElement('div');
+    headerRow.className = 'panel-header-row';
+    
     const title = document.createElement('div');
     title.className = 'panel-title';
-    title.innerHTML = '<h2>⚡ ELECTRICAL SYSTEM</h2><span class="subtitle">3-Phase 380V 50Hz</span>';
-    this.container.appendChild(title);
+    title.innerHTML = '<h2>⚡ OPERATOR PANEL</h2><span class="subtitle">3-Phase 380V 50Hz</span>';
+    headerRow.appendChild(title);
     
-    // Main power display
     const powerSummary = this.createPowerSummary();
-    this.container.appendChild(powerSummary);
+    headerRow.appendChild(powerSummary);
     
-    // Motor sections
+    const emergencySection = this.createEmergencySection();
+    headerRow.appendChild(emergencySection);
+    
+    this.container.appendChild(headerRow);
+    
+    // Main content: Motors + Hydraulic/Tilt side by side
+    const mainContent = document.createElement('div');
+    mainContent.className = 'panel-main-content';
+    
+    // Left side: Motor sections
     const motorsGrid = document.createElement('div');
     motorsGrid.className = 'motors-grid';
     
     // Platform motor section
-    const platformSection = this.createMotorSection('PLATFORM MOTOR', 'platform', '15 kW');
+    const platformSection = this.createMotorSection('PLATFORM', 'platform', '15 kW');
     this.platformMeters = platformSection.meters;
     this.platformStatus = platformSection.status;
     this.platformPowerDisplay = platformSection.power;
@@ -136,7 +154,7 @@ export class MotorPanel {
     motorsGrid.appendChild(platformSection.element);
     
     // Windmill motor section
-    const windmillSection = this.createMotorSection('WINDMILL MOTOR', 'windmill', '7.5 kW');
+    const windmillSection = this.createMotorSection('WINDMILL', 'windmill', '7.5 kW');
     this.windmillMeters = windmillSection.meters;
     this.windmillStatus = windmillSection.status;
     this.windmillPowerDisplay = windmillSection.power;
@@ -146,21 +164,19 @@ export class MotorPanel {
     motorsGrid.appendChild(windmillSection.element);
     
     // Hydraulic motor section
-    const hydraulicSection = this.createMotorSection('HYDRAULIC PUMP', 'hydraulic', '3 kW', true);
+    const hydraulicSection = this.createMotorSection('HYDRAULIC', 'hydraulic', '3 kW', true);
     this.hydraulicMeters = hydraulicSection.meters;
     this.hydraulicStatus = hydraulicSection.status;
     this.hydraulicPowerDisplay = hydraulicSection.power;
     motorsGrid.appendChild(hydraulicSection.element);
     
-    this.container.appendChild(motorsGrid);
+    mainContent.appendChild(motorsGrid);
     
-    // Hydraulic system and tilt control section
+    // Right side: Hydraulic system and tilt control
     const hydraulicSystemSection = this.createHydraulicSystemSection();
-    this.container.appendChild(hydraulicSystemSection);
+    mainContent.appendChild(hydraulicSystemSection);
     
-    // Emergency controls
-    const emergencySection = this.createEmergencySection();
-    this.container.appendChild(emergencySection);
+    this.container.appendChild(mainContent);
   }
   
   /**
@@ -233,10 +249,10 @@ export class MotorPanel {
             <label>Tilt Angle:</label>
             <div class="tilt-buttons">
               <button class="tilt-btn tilt-down-btn" title="Decrease tilt">▼</button>
-              <input type="range" class="tilt-slider" min="0" max="30" step="1" value="15">
+              <input type="range" class="tilt-slider" min="0" max="30" step="1" value="0">
               <button class="tilt-btn tilt-up-btn" title="Increase tilt">▲</button>
             </div>
-            <span class="tilt-slider-value">15°</span>
+            <span class="tilt-slider-value">0°</span>
           </div>
         </div>
       </div>
@@ -252,20 +268,27 @@ export class MotorPanel {
     this.tiltSlider = section.querySelector('.tilt-slider') as HTMLInputElement;
     this.tiltUpBtn = section.querySelector('.tilt-up-btn') as HTMLButtonElement;
     this.tiltDownBtn = section.querySelector('.tilt-down-btn') as HTMLButtonElement;
+    this.tiltControlsSection = section.querySelector('.tilt-control-section') as HTMLElement;
     
     const tiltSliderValue = section.querySelector('.tilt-slider-value') as HTMLElement;
     const cylinderValueEl = section.querySelector('.cylinder-value') as HTMLElement;
     const tiltLine = section.querySelector('.tilt-line') as HTMLElement;
     
-    // Tilt slider event
+    // Tilt slider event - only works if hydraulic pressure is sufficient
     this.tiltSlider.addEventListener('input', () => {
+      if (!this.hydraulicPressureOk) {
+        return; // Ignore input if no pressure
+      }
       const angle = parseFloat(this.tiltSlider.value);
       tiltSliderValue.textContent = `${angle}°`;
       this.callbacks.onTiltChange(angle);
     });
     
-    // Tilt up button
+    // Tilt up button - only works if hydraulic pressure is sufficient
     this.tiltUpBtn.addEventListener('click', () => {
+      if (!this.hydraulicPressureOk) {
+        return; // Ignore click if no pressure
+      }
       const current = parseFloat(this.tiltSlider.value);
       const newVal = Math.min(30, current + 5);
       this.tiltSlider.value = newVal.toString();
@@ -273,14 +296,20 @@ export class MotorPanel {
       this.callbacks.onTiltUp();
     });
     
-    // Tilt down button
+    // Tilt down button - only works if hydraulic pressure is sufficient
     this.tiltDownBtn.addEventListener('click', () => {
+      if (!this.hydraulicPressureOk) {
+        return; // Ignore click if no pressure
+      }
       const current = parseFloat(this.tiltSlider.value);
       const newVal = Math.max(0, current - 5);
       this.tiltSlider.value = newVal.toString();
       tiltSliderValue.textContent = `${newVal}°`;
       this.callbacks.onTiltDown();
     });
+    
+    // Initially disable tilt controls until hydraulic pump is running
+    this.updateTiltControlsEnabled(false);
     
     return section;
   }
@@ -732,6 +761,24 @@ export class MotorPanel {
   }
   
   /**
+   * Update tilt controls enabled/disabled state based on hydraulic pump status
+   */
+  private updateTiltControlsEnabled(enabled: boolean): void {
+    if (this.tiltSlider) {
+      this.tiltSlider.disabled = !enabled;
+    }
+    if (this.tiltUpBtn) {
+      this.tiltUpBtn.disabled = !enabled;
+    }
+    if (this.tiltDownBtn) {
+      this.tiltDownBtn.disabled = !enabled;
+    }
+    if (this.tiltControlsSection) {
+      this.tiltControlsSection.classList.toggle('disabled', !enabled);
+    }
+  }
+  
+  /**
    * Set frequency slider values (for syncing with simulation)
    */
   setFrequencies(platformFreq: number, windmillFreq: number): void {
@@ -801,6 +848,13 @@ export class MotorPanel {
     const tiltLine = this.container.querySelector('.tilt-line') as HTMLElement;
     if (tiltLine) {
       tiltLine.style.setProperty('--tilt', `${state.tiltAngle}deg`);
+    }
+    
+    // Check if hydraulic pressure is sufficient for tilt operation
+    const pressureOk = state.pressure >= MotorPanel.MIN_TILT_PRESSURE;
+    if (pressureOk !== this.hydraulicPressureOk) {
+      this.hydraulicPressureOk = pressureOk;
+      this.updateTiltControlsEnabled(pressureOk);
     }
   }
   

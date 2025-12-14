@@ -67,9 +67,9 @@
             background: rgba(10, 15, 25, 0.95);
             border: 2px solid #00aaff;
             border-radius: 8px;
-            padding: 15px;
-            min-width: 720px;
-            max-height: 45vh;
+            padding: 12px;
+            max-width: 95vw;
+            max-height: 35vh;
             overflow-y: auto;
             box-shadow: 0 4px 30px rgba(0, 170, 255, 0.3);
         }
@@ -79,123 +79,138 @@
             font-family: 'Consolas', 'Monaco', monospace;
         }
         
+        /* Header Row - title, power, emergency all in one line */
+        .panel-header-row {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 10px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid #00aaff;
+        }
+        
         .panel-title {
-            text-align: center;
-            margin-bottom: 15px;
-            padding-bottom: 10px;
-            border-bottom: 2px solid #00aaff;
+            flex-shrink: 0;
         }
         
         .panel-title h2 {
             color: #00aaff;
-            font-size: 18px;
-            letter-spacing: 2px;
+            font-size: 14px;
+            letter-spacing: 1px;
             margin: 0;
+            white-space: nowrap;
         }
         
         .panel-title .subtitle {
-            color: #888;
-            font-size: 11px;
+            color: #666;
+            font-size: 9px;
         }
         
-        /* Power Summary */
+        /* Power Summary - compact inline */
         .power-summary {
             display: flex;
-            justify-content: space-around;
+            gap: 15px;
             background: #0a0f15;
-            padding: 10px;
-            border-radius: 5px;
-            margin-bottom: 15px;
+            padding: 6px 12px;
+            border-radius: 4px;
             border: 1px solid #333;
+            flex: 1;
         }
         
         .power-stat {
             text-align: center;
+            display: flex;
+            align-items: center;
+            gap: 5px;
         }
         
         .power-stat.total {
             border-left: 1px solid #333;
             border-right: 1px solid #333;
-            padding: 0 20px;
+            padding: 0 12px;
         }
         
         .power-label {
-            display: block;
-            font-size: 10px;
+            font-size: 9px;
             color: #888;
             text-transform: uppercase;
-            letter-spacing: 1px;
         }
         
         .power-summary .power-value {
-            display: block;
-            font-size: 24px;
+            font-size: 16px;
             font-weight: bold;
             color: #00ff88;
         }
         
         .power-summary .power-unit {
-            display: block;
-            font-size: 10px;
+            font-size: 9px;
             color: #666;
+            margin-left: 2px;
+        }
+        
+        /* Main Content - motors beside hydraulics */
+        .panel-main-content {
+            display: flex;
+            gap: 12px;
         }
         
         /* Motors Grid */
         .motors-grid {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 15px;
-            margin-bottom: 15px;
+            display: flex;
+            gap: 10px;
+            flex: 1;
         }
         
         .motor-section {
             background: #0d1520;
             border: 1px solid #2a3a4a;
-            border-radius: 6px;
-            padding: 12px;
+            border-radius: 5px;
+            padding: 8px;
+            flex: 1;
+            min-width: 150px;
         }
         
         .motor-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 10px;
-            padding-bottom: 8px;
+            margin-bottom: 6px;
+            padding-bottom: 4px;
             border-bottom: 1px solid #2a3a4a;
         }
         
         .motor-header h3 {
-            font-size: 11px;
+            font-size: 10px;
             color: #00aaff;
             margin: 0;
             letter-spacing: 1px;
         }
         
         .motor-rating {
-            font-size: 10px;
+            font-size: 9px;
             color: #ffaa00;
             background: #332a00;
-            padding: 2px 6px;
-            border-radius: 3px;
+            padding: 1px 4px;
+            border-radius: 2px;
         }
         
         /* Motor Status */
         .motor-status {
             display: flex;
             align-items: center;
-            gap: 8px;
-            padding: 6px 10px;
-            border-radius: 4px;
-            margin-bottom: 10px;
-            font-size: 11px;
+            gap: 5px;
+            padding: 3px 6px;
+            border-radius: 3px;
+            margin-bottom: 6px;
+            font-size: 9px;
             font-weight: bold;
         }
         
         .status-led {
-            width: 10px;
-            height: 10px;
+            width: 8px;
+            height: 8px;
             border-radius: 50%;
-            box-shadow: 0 0 5px currentColor;
+            box-shadow: 0 0 4px currentColor;
         }
         
         .motor-status.stopped {
@@ -274,8 +289,8 @@
         .phase-meters {
             display: flex;
             justify-content: space-between;
-            gap: 8px;
-            margin-bottom: 10px;
+            gap: 4px;
+            margin-bottom: 6px;
         }
         
         .amp-meter {
@@ -283,29 +298,29 @@
             text-align: center;
             background: #080c10;
             border: 1px solid #1a2a3a;
-            border-radius: 4px;
-            padding: 8px 4px;
+            border-radius: 3px;
+            padding: 4px 2px;
         }
         
         .meter-face {
             position: relative;
-            width: 50px;
-            height: 30px;
-            margin: 0 auto 5px;
+            width: 40px;
+            height: 24px;
+            margin: 0 auto 3px;
             overflow: hidden;
         }
         
         .meter-scale {
             display: flex;
             justify-content: space-between;
-            font-size: 7px;
+            font-size: 6px;
             color: #666;
             padding: 0 2px;
         }
         
         .meter-arc {
             position: relative;
-            height: 20px;
+            height: 16px;
             margin-top: 2px;
         }
         
@@ -333,7 +348,7 @@
             bottom: 0;
             left: 50%;
             width: 2px;
-            height: 18px;
+            height: 14px;
             background: linear-gradient(to top, #ff4400, #ffaa00);
             transform-origin: bottom center;
             transform: translateX(-50%) rotate(var(--rotation, -45deg));
@@ -346,30 +361,29 @@
             bottom: -2px;
             left: 50%;
             transform: translateX(-50%);
-            width: 6px;
-            height: 6px;
+            width: 5px;
+            height: 5px;
             background: #888;
             border-radius: 50%;
             border: 1px solid #444;
         }
         
         .meter-reading {
-            font-size: 14px;
+            font-size: 11px;
             font-weight: bold;
             color: #00ff88;
         }
         
         .reading-unit {
-            font-size: 10px;
+            font-size: 8px;
             color: #888;
-            margin-left: 2px;
+            margin-left: 1px;
         }
         
         .meter-label {
-            font-size: 9px;
+            font-size: 7px;
             color: #666;
             text-transform: uppercase;
-            letter-spacing: 1px;
         }
         
         .amp-meter.warning .meter-reading {
@@ -384,16 +398,16 @@
         /* Motor Power Display */
         .motor-power {
             background: #080c10;
-            padding: 6px 8px;
-            border-radius: 4px;
-            font-size: 10px;
-            margin-bottom: 8px;
+            padding: 4px 6px;
+            border-radius: 3px;
+            font-size: 9px;
+            margin-bottom: 6px;
         }
         
         .power-row {
             display: flex;
             justify-content: space-between;
-            padding: 2px 0;
+            padding: 1px 0;
         }
         
         .power-row span:first-child {
@@ -426,20 +440,20 @@
         .freq-control {
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 4px;
             flex-wrap: wrap;
         }
         
         .freq-control label {
-            font-size: 9px;
+            font-size: 8px;
             color: #666;
             width: 100%;
-            margin-bottom: 2px;
+            margin-bottom: 1px;
         }
         
         .freq-slider {
             flex: 1;
-            height: 4px;
+            height: 3px;
             background: #1a2a3a;
             border-radius: 2px;
             outline: none;
@@ -448,18 +462,18 @@
         
         .freq-slider::-webkit-slider-thumb {
             -webkit-appearance: none;
-            width: 14px;
-            height: 14px;
+            width: 10px;
+            height: 10px;
             background: #00aaff;
             border-radius: 50%;
             cursor: pointer;
         }
         
         .freq-value {
-            font-size: 11px;
+            font-size: 9px;
             color: #00aaff;
             font-weight: bold;
-            min-width: 40px;
+            min-width: 30px;
             text-align: right;
         }
         
@@ -467,31 +481,31 @@
         .dir-control {
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 4px;
             flex-wrap: wrap;
-            margin-top: 8px;
-            padding-top: 8px;
+            margin-top: 4px;
+            padding-top: 4px;
             border-top: 1px solid #1a2a3a;
         }
         
         .dir-control label {
-            font-size: 9px;
+            font-size: 8px;
             color: #666;
             width: 100%;
-            margin-bottom: 2px;
+            margin-bottom: 1px;
         }
         
         .dir-buttons {
             display: flex;
-            gap: 4px;
+            gap: 3px;
         }
         
         .dir-btn {
-            padding: 4px 10px;
-            font-size: 10px;
+            padding: 2px 6px;
+            font-size: 8px;
             font-weight: bold;
             border: 1px solid #333;
-            border-radius: 3px;
+            border-radius: 2px;
             cursor: pointer;
             transition: all 0.2s;
             text-transform: uppercase;
@@ -532,14 +546,13 @@
         }
         
         .dir-indicator {
-            font-size: 10px;
+            font-size: 8px;
             font-weight: bold;
             color: #00ff88;
             background: #0a1a0a;
-            padding: 4px 8px;
-            border-radius: 3px;
+            padding: 2px 5px;
+            border-radius: 2px;
             font-family: monospace;
-            letter-spacing: 1px;
         }
         
         .dir-indicator.reverse {
@@ -561,15 +574,15 @@
         /* Hydraulic Controls */
         .hydraulic-controls {
             display: flex;
-            gap: 8px;
+            gap: 4px;
         }
         
         .hydraulic-start, .hydraulic-stop {
             flex: 1;
-            padding: 8px;
+            padding: 4px;
             border: 1px solid;
-            border-radius: 4px;
-            font-size: 10px;
+            border-radius: 3px;
+            font-size: 8px;
             font-weight: bold;
             cursor: pointer;
             text-transform: uppercase;
@@ -599,28 +612,28 @@
         .hydraulic-system-section {
             background: #0a1015;
             border: 1px solid #1a3a4a;
-            border-radius: 6px;
-            padding: 12px;
-            margin-bottom: 15px;
+            border-radius: 5px;
+            padding: 8px;
+            min-width: 200px;
         }
         
         .section-header h3 {
-            font-size: 12px;
+            font-size: 10px;
             color: #ffaa00;
-            margin: 0 0 12px 0;
+            margin: 0 0 8px 0;
             letter-spacing: 1px;
         }
         
         .hydraulic-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 15px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
         }
         
         .hydraulic-gauges {
             display: flex;
-            flex-direction: column;
             gap: 10px;
+            align-items: flex-start;
         }
         
         .gauge-group {
@@ -631,21 +644,21 @@
         /* Pressure Gauge (analog style) */
         .gauge {
             position: relative;
-            width: 100px;
-            height: 60px;
+            width: 70px;
+            height: 45px;
             background: #0a0f15;
-            border: 2px solid #2a3a4a;
-            border-radius: 50px 50px 0 0;
+            border: 1px solid #2a3a4a;
+            border-radius: 35px 35px 0 0;
             overflow: hidden;
         }
         
         .gauge-arc {
             position: absolute;
-            top: 10px;
-            left: 10px;
-            right: 10px;
-            height: 40px;
-            border-radius: 40px 40px 0 0;
+            top: 6px;
+            left: 6px;
+            right: 6px;
+            height: 28px;
+            border-radius: 28px 28px 0 0;
             background: linear-gradient(90deg, 
                 #0a3a0a 0%, 
                 #0a3a0a 50%, 
@@ -664,7 +677,7 @@
                 #00ff00 50%, 
                 #ffff00 70%, 
                 #ff0000 100%);
-            border-radius: 40px 40px 0 0;
+            border-radius: 28px 28px 0 0;
         }
         
         .gauge-needle {
@@ -672,7 +685,7 @@
             bottom: 0;
             left: 50%;
             width: 2px;
-            height: 35px;
+            height: 24px;
             background: linear-gradient(to top, #888, #ff4400);
             transform-origin: bottom center;
             transform: translateX(-50%) rotate(var(--rotation, -90deg));
@@ -682,23 +695,23 @@
         
         .gauge-center {
             position: absolute;
-            bottom: -4px;
+            bottom: -3px;
             left: 50%;
             transform: translateX(-50%);
-            width: 10px;
-            height: 10px;
+            width: 7px;
+            height: 7px;
             background: #666;
             border-radius: 50%;
-            border: 2px solid #444;
+            border: 1px solid #444;
             z-index: 3;
         }
         
         .gauge-value {
             position: absolute;
-            bottom: 15px;
+            bottom: 10px;
             left: 50%;
             transform: translateX(-50%);
-            font-size: 16px;
+            font-size: 12px;
             font-weight: bold;
             color: #00ff88;
             z-index: 4;
@@ -706,50 +719,49 @@
         
         .gauge-unit {
             position: absolute;
-            bottom: 2px;
+            bottom: 1px;
             left: 50%;
             transform: translateX(-50%);
-            font-size: 9px;
+            font-size: 7px;
             color: #888;
             z-index: 4;
         }
         
         .gauge-label {
             position: absolute;
-            bottom: -20px;
+            bottom: -16px;
             left: 50%;
             transform: translateX(-50%);
-            font-size: 8px;
+            font-size: 7px;
             color: #666;
             white-space: nowrap;
-            letter-spacing: 1px;
         }
         
         .gauge-scale {
             position: absolute;
-            top: 5px;
-            left: 5px;
-            right: 5px;
+            top: 3px;
+            left: 3px;
+            right: 3px;
             display: flex;
             justify-content: space-between;
-            font-size: 7px;
+            font-size: 6px;
             color: #555;
         }
         
         /* Hydraulic Stats */
         .hydraulic-stats {
             background: #080c10;
-            padding: 8px;
-            border-radius: 4px;
-            margin-top: 25px;
+            padding: 6px;
+            border-radius: 3px;
+            flex: 1;
         }
         
         .stat-row {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 4px 0;
-            font-size: 10px;
+            padding: 2px 0;
+            font-size: 9px;
         }
         
         .stat-label {
@@ -772,8 +784,8 @@
         /* Cylinder Bar */
         .cylinder-bar {
             position: relative;
-            width: 80px;
-            height: 12px;
+            width: 60px;
+            height: 10px;
             background: #1a1a2a;
             border: 1px solid #333;
             border-radius: 2px;
@@ -791,7 +803,7 @@
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            font-size: 8px;
+            font-size: 7px;
             color: #fff;
             text-shadow: 0 0 2px #000;
         }
@@ -800,27 +812,46 @@
         .tilt-control-section {
             display: flex;
             flex-direction: column;
-            gap: 10px;
+            gap: 6px;
+            transition: opacity 0.3s;
+        }
+        
+        .tilt-control-section.disabled {
+            opacity: 0.5;
+            pointer-events: none;
+        }
+        
+        .tilt-control-section.disabled::before {
+            content: '⚠ LOW PRESSURE - START PUMP';
+            display: block;
+            text-align: center;
+            font-size: 8px;
+            color: #ff8800;
+            background: #2a1a0a;
+            padding: 3px 6px;
+            border-radius: 3px;
+            margin-bottom: 4px;
+            letter-spacing: 0.5px;
         }
         
         .tilt-display {
             background: #080c10;
-            padding: 10px;
-            border-radius: 4px;
+            padding: 6px;
+            border-radius: 3px;
         }
         
         .tilt-indicator {
             display: flex;
             align-items: center;
-            gap: 15px;
+            gap: 10px;
         }
         
         .tilt-platform {
             position: relative;
-            width: 60px;
-            height: 40px;
+            width: 50px;
+            height: 30px;
             background: #1a2a3a;
-            border-radius: 4px;
+            border-radius: 3px;
             overflow: hidden;
         }
         
@@ -829,18 +860,18 @@
             top: 50%;
             left: 10%;
             right: 10%;
-            height: 3px;
+            height: 2px;
             background: linear-gradient(90deg, #00aaff, #ffaa00);
             transform-origin: left center;
             transform: rotate(var(--tilt, 0deg));
             transition: transform 0.2s ease-out;
-            border-radius: 2px;
+            border-radius: 1px;
         }
         
         .tilt-values {
             display: flex;
             flex-direction: column;
-            gap: 5px;
+            gap: 2px;
         }
         
         .tilt-current, .tilt-target {
@@ -849,19 +880,18 @@
         }
         
         .tilt-label {
-            font-size: 8px;
+            font-size: 7px;
             color: #666;
-            letter-spacing: 1px;
         }
         
         .tilt-angle {
-            font-size: 18px;
+            font-size: 14px;
             font-weight: bold;
             color: #00ff88;
         }
         
         .tilt-target-angle {
-            font-size: 12px;
+            font-size: 10px;
             color: #888;
         }
         
@@ -869,32 +899,32 @@
         .tilt-controls {
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 4px;
             flex-wrap: wrap;
         }
         
         .tilt-controls label {
-            font-size: 9px;
+            font-size: 8px;
             color: #666;
             width: 100%;
-            margin-bottom: 2px;
+            margin-bottom: 1px;
         }
         
         .tilt-buttons {
             display: flex;
             align-items: center;
-            gap: 6px;
+            gap: 4px;
             flex: 1;
         }
         
         .tilt-btn {
-            width: 28px;
-            height: 28px;
+            width: 22px;
+            height: 22px;
             background: #1a2a3a;
             border: 1px solid #3a4a5a;
-            border-radius: 4px;
+            border-radius: 3px;
             color: #00aaff;
-            font-size: 12px;
+            font-size: 10px;
             cursor: pointer;
             display: flex;
             align-items: center;
@@ -913,7 +943,7 @@
         
         .tilt-slider {
             flex: 1;
-            height: 4px;
+            height: 3px;
             background: #1a2a3a;
             border-radius: 2px;
             outline: none;
@@ -922,50 +952,73 @@
         
         .tilt-slider::-webkit-slider-thumb {
             -webkit-appearance: none;
-            width: 14px;
-            height: 14px;
+            width: 10px;
+            height: 10px;
             background: #ffaa00;
             border-radius: 50%;
             cursor: pointer;
         }
         
         .tilt-slider-value {
-            font-size: 11px;
+            font-size: 9px;
             color: #ffaa00;
             font-weight: bold;
-            min-width: 30px;
+            min-width: 25px;
             text-align: right;
         }
         
-        /* Emergency Section */
+        /* Disabled tilt controls */
+        .tilt-slider:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+        
+        .tilt-slider:disabled::-webkit-slider-thumb {
+            background: #666;
+            cursor: not-allowed;
+        }
+        
+        .tilt-btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+            background: #1a1a1a;
+            border-color: #333;
+            color: #555;
+        }
+        
+        .tilt-btn:disabled:hover {
+            background: #1a1a1a;
+            border-color: #333;
+        }
+        
+        /* Emergency Section - inline with header */
         .emergency-section {
             display: flex;
-            gap: 10px;
-            padding-top: 10px;
-            border-top: 2px solid #2a0a0a;
+            gap: 6px;
+            flex-shrink: 0;
         }
         
         .motor-estop {
-            flex: 2;
             display: flex;
             align-items: center;
             justify-content: center;
-            gap: 10px;
-            padding: 12px;
+            gap: 4px;
+            padding: 6px 12px;
             background: linear-gradient(180deg, #8b0000, #5a0000);
-            border: 3px solid #ff0000;
-            border-radius: 6px;
+            border: 2px solid #ff0000;
+            border-radius: 4px;
             color: #fff;
-            font-size: 14px;
+            font-size: 10px;
             font-weight: bold;
             cursor: pointer;
             text-shadow: 0 1px 2px rgba(0,0,0,0.5);
-            box-shadow: 0 4px 15px rgba(255, 0, 0, 0.3);
+            box-shadow: 0 2px 10px rgba(255, 0, 0, 0.3);
+            white-space: nowrap;
         }
         
         .motor-estop:hover {
             background: linear-gradient(180deg, #a00000, #700000);
-            box-shadow: 0 4px 20px rgba(255, 0, 0, 0.5);
+            box-shadow: 0 2px 15px rgba(255, 0, 0, 0.5);
         }
         
         .motor-estop:active {
@@ -973,22 +1026,22 @@
         }
         
         .estop-icon {
-            font-size: 18px;
+            font-size: 12px;
             color: #ff0000;
             animation: blink-red 1s infinite;
         }
         
         .reset-faults-btn {
-            flex: 1;
-            padding: 12px;
+            padding: 6px 10px;
             background: #1a2a3a;
-            border: 2px solid #00aaff;
-            border-radius: 6px;
+            border: 1px solid #00aaff;
+            border-radius: 4px;
             color: #00aaff;
-            font-size: 11px;
+            font-size: 9px;
             font-weight: bold;
             cursor: pointer;
             text-transform: uppercase;
+            white-space: nowrap;
         }
         
         .reset-faults-btn:hover {

@@ -57,7 +57,7 @@ class BalerinaSimulator {
       initialControls: {
         platformSpeed: 0.5, // rad/s
         windmillSpeed: 1.0, // rad/s
-        tiltAngle: Math.PI / 12, // radians (15 degrees initial tilt)
+        tiltAngle: 0, // radians (0 degrees initial tilt)
         platformDirection: RotationDirection.COUNTER_CLOCKWISE,
         windmillDirection: RotationDirection.COUNTER_CLOCKWISE
       }
@@ -141,10 +141,7 @@ class BalerinaSimulator {
         }
       });
       
-      // Start hydraulic motor by default (needed for tilt)
-      this.simulation.startHydraulicMotor();
-      
-      // Initialize tilt slider to initial value
+      // Initialize tilt slider to initial value (hydraulic pump starts stopped)
       const initialTiltDeg = config.initialControls.tiltAngle * 180 / Math.PI;
       this.motorPanel.setTiltAngle(initialTiltDeg);
     }
@@ -222,15 +219,12 @@ class BalerinaSimulator {
     this.simulation.reset();
     this.simulation.resetMotorFaults();
     
-    // Reset motor panel frequencies and tilt
+    // Reset motor panel frequencies and tilt (hydraulic pump stays stopped)
     if (this.motorPanel) {
       this.motorPanel.setFrequencies(0, 0);
       const config = this.simulation.getConfig();
       this.motorPanel.setTiltAngle(config.initialControls.tiltAngle * 180 / Math.PI);
     }
-    
-    // Restart hydraulic motor
-    this.simulation.startHydraulicMotor();
   }
   
   /**
