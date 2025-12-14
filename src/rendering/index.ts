@@ -34,6 +34,8 @@ export class RenderingEngine {
   private forceArrows: THREE.ArrowHelper[] = [];
   private showForceVectors: boolean = false;
   private showGForceColors: boolean = false;
+  private axisHelperCanvas: HTMLCanvasElement | null = null;
+  private axisHelperContainer: HTMLElement | null = null;
   
   /**
    * Create a new rendering engine
@@ -83,8 +85,156 @@ export class RenderingEngine {
     // const axesHelper = new THREE.AxesHelper(5);
     // this.scene.add(axesHelper);
     
+    // Create Blender-style axis helper overlay
+    this.createBlenderStyleAxisHelper(container);
+    
     // Initialize geometry
     this.initializeGeometry();
+  }
+  
+  /**
+   * Create a Blender-style axis helper overlay in the bottom-left corner
+   */
+  private createBlenderStyleAxisHelper(container: HTMLElement): void {
+    // Create container
+    const helperContainer = document.createElement('div');
+    helperContainer.style.position = 'absolute';
+    helperContainer.style.bottom = '20px';
+    helperContainer.style.left = '20px';
+    helperContainer.style.width = '120px';
+    helperContainer.style.height = '120px';
+    helperContainer.style.backgroundColor = '#1a1a1a'; // Match scene background
+    helperContainer.style.border = '1px solid rgba(255, 255, 255, 0.2)';
+    helperContainer.style.borderRadius = '5px';
+    helperContainer.style.padding = '10px';
+    helperContainer.style.pointerEvents = 'none';
+    helperContainer.style.zIndex = '1000';
+    
+    // Create canvas for drawing
+    const canvas = document.createElement('canvas');
+    canvas.width = 100;
+    canvas.height = 100;
+    canvas.style.display = 'block';
+    helperContainer.appendChild(canvas);
+    
+    this.axisHelperCanvas = canvas;
+    this.axisHelperContainer = helperContainer;
+    container.appendChild(helperContainer);
+  }
+  
+  /**
+   * Update the Blender-style axis helper based on camera orientation
+   */
+  private updateBlenderStyleAxisHelper(): void {
+    if (!this.axisHelperCanvas) return;
+    
+    const ctx = this.axisHelperCanvas.getContext('2d')!;
+    const size = 100;
+    const center = size / 2;
+    const axisLength = 35;
+    
+    // Clear canvas
+    ctx.clearRect(0, 0, size, size);
+    
+    // Get camera's world direction vectors
+    const right = new THREE.Vector3();
+    right.setFromMatrixColumn(this.camera.matrixWorld, 0);
+    const up = new THREE.Vector3();
+    up.setFromMatrixColumn(this.camera.matrixWorld, 1);
+    const forward = new THREE.Vector3();
+    forward.setFromMatrixColumn(this.camera.matrixWorld, 2);
+    
+    // Project world axes onto camera's view plane
+    // X axis (red) - world X projected onto camera's right/up plane
+    const worldX = new THREE.Vector3(1, 0, 0);
+    const xScreenX = worldX.dot(right) * axisLength;
+    const xScreenY = -worldX.dot(up) * axisLength; // Negative because screen Y is inverted
+    
+    // Y axis (green) - world Y projected onto camera's right/up plane
+    const worldY = new THREE.Vector3(0, 1, 0);
+    const yScreenX = worldY.dot(right) * axisLength;
+    const yScreenY = -worldY.dot(up) * axisLength;
+    
+    // Z axis (blue) - world Z projected onto camera's right/up plane
+    const worldZ = new THREE.Vector3(0, 0, 1);
+    const zScreenX = worldZ.dot(right) * axisLength;
+    const zScreenY = -worldZ.dot(up) * axisLength;
+    
+    // Prettier colors - brighter and more vibrant
+    const xColor = '#ff6b6b'; // Coral red
+    const yColor = '#51cf66'; // Bright green
+    const zColor = '#4dabf7'; // Sky blue
+    
+    // Draw X axis (coral red)
+    ctx.strokeStyle = xColor;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(center, center);
+    ctx.lineTo(center + xScreenX, center + xScreenY);
+    ctx.stroke();
+    // Arrow head
+    this.drawArrowHead(ctx, center, center, center + xScreenX, center + xScreenY, xColor);
+    // Label
+    ctx.fillStyle = xColor;
+    ctx.font = 'bold 14px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('X', center + xScreenX * 1.3, center + xScreenY * 1.3);
+    
+    // Draw Y axis (bright green)
+    ctx.strokeStyle = yColor;
+    ctx.beginPath();
+    ctx.moveTo(center, center);
+    ctx.lineTo(center + yScreenX, center + yScreenY);
+    ctx.stroke();
+    // Arrow head
+    this.drawArrowHead(ctx, center, center, center + yScreenX, center + yScreenY, yColor);
+    // Label
+    ctx.fillStyle = yColor;
+    ctx.fillText('Y', center + yScreenX * 1.3, center + yScreenY * 1.3);
+    
+    // Draw Z axis (sky blue)
+    ctx.strokeStyle = zColor;
+    ctx.setLineDash([3, 3]);
+    ctx.beginPath();
+    ctx.moveTo(center, center);
+    ctx.lineTo(center + zScreenX, center + zScreenY);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    // Arrow head
+    this.drawArrowHead(ctx, center, center, center + zScreenX, center + zScreenY, zColor);
+    // Label
+    ctx.fillStyle = zColor;
+    ctx.fillText('Z', center + zScreenX * 1.3, center + zScreenY * 1.3);
+  }
+  
+  /**
+   * Draw an arrow head at the end of a line
+   */
+  private drawArrowHead(
+    ctx: CanvasRenderingContext2D,
+    x1: number,
+    y1: number,
+    x2: number,
+    y2: number,
+    color: string
+  ): void {
+    const angle = Math.atan2(y2 - y1, x2 - x1);
+    const arrowLength = 8;
+    const arrowAngle = Math.PI / 6;
+    
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(x2, y2);
+    ctx.lineTo(
+      x2 - arrowLength * Math.cos(angle - arrowAngle),
+      y2 - arrowLength * Math.sin(angle - arrowAngle)
+    );
+    ctx.lineTo(
+      x2 - arrowLength * Math.cos(angle + arrowAngle),
+      y2 - arrowLength * Math.sin(angle + arrowAngle)
+    );
+    ctx.closePath();
+    ctx.fill();
   }
   
   /**
@@ -263,6 +413,10 @@ export class RenderingEngine {
   render(): void {
     // Update controls (required for damping)
     this.controls.update();
+    
+    // Update Blender-style axis helper
+    this.updateBlenderStyleAxisHelper();
+    
     this.renderer.render(this.scene, this.camera);
   }
   
@@ -283,6 +437,9 @@ export class RenderingEngine {
    * Clean up resources
    */
   dispose(): void {
+    if (this.axisHelperContainer && this.axisHelperContainer.parentElement) {
+      this.axisHelperContainer.parentElement.removeChild(this.axisHelperContainer);
+    }
     this.controls.dispose();
     this.renderer.dispose();
     // Additional cleanup would go here
