@@ -34,7 +34,9 @@ class BalerinaSimulator {
     
     // Secondary platform center offset from pivot point
     // This determines how far the center of the tilted disc is from the pivot
-    const secondaryPlatformOffset = windmillRadius * 0.5; // Half of windmill radius
+    // Set equal to windmillRadius so the outer edge of the disc is exactly at the pivot point
+    // This ensures the disc doesn't extend past the pivot and go below the platform
+    const secondaryPlatformOffset = windmillRadius; // Equal to disc radius
     
     const config: SimulationConfig = {
       timeStep: 0.01, // 10ms fixed timestep for physics
