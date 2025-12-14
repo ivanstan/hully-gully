@@ -70,9 +70,9 @@ export class RenderingEngine {
     const gridHelper = new THREE.GridHelper(50, 50, 0x444444, 0x222222);
     this.scene.add(gridHelper);
     
-    // Axes helper
-    const axesHelper = new THREE.AxesHelper(5);
-    this.scene.add(axesHelper);
+    // Axes helper (commented out - can be enabled for debugging)
+    // const axesHelper = new THREE.AxesHelper(5);
+    // this.scene.add(axesHelper);
     
     // Initialize geometry
     this.initializeGeometry();

@@ -11,6 +11,7 @@
 
 import { SimulationEngine } from './simulation/index.js';
 import { RenderingEngine } from './rendering/index.js';
+import { ControlPanel } from './ui/ControlPanel.js';
 import { SimulationConfig, RotationDirection } from './types/index.js';
 
 /**
@@ -19,9 +20,10 @@ import { SimulationConfig, RotationDirection } from './types/index.js';
 class BalerinaSimulator {
   private simulation: SimulationEngine;
   private rendering: RenderingEngine;
+  private controlPanel: ControlPanel | null = null;
   private animationFrameId: number | null = null;
   
-  constructor(container: HTMLElement) {
+  constructor(container: HTMLElement, controlPanelContainer?: HTMLElement) {
     // Create default simulation configuration
     const config: SimulationConfig = {
       timeStep: 0.01, // 10ms fixed timestep for physics
@@ -57,6 +59,28 @@ class BalerinaSimulator {
       const h = container.clientHeight || 600;
       this.rendering.resize(w, h);
     });
+    
+    // Create control panel if container provided
+    if (controlPanelContainer) {
+      this.controlPanel = new ControlPanel(controlPanelContainer, {
+        onControlsChange: (controls) => {
+          this.simulation.updateControls(controls);
+        },
+        onEmergencyStop: () => {
+          // Set all speeds to zero
+          this.simulation.updateControls({
+            platformSpeed: 0,
+            eccentricSpeed: 0
+          });
+        },
+        onReset: () => {
+          this.reset();
+        }
+      });
+      
+      // Initialize control panel with initial values
+      this.controlPanel.updateFromState(config.initialControls);
+    }
   }
   
   /**
@@ -105,6 +129,11 @@ class BalerinaSimulator {
    */
   reset(): void {
     this.simulation.reset();
+    // Reset control panel to initial values
+    if (this.controlPanel) {
+      const config = this.simulation.getConfig();
+      this.controlPanel.updateFromState(config.initialControls);
+    }
   }
   
   /**
@@ -138,8 +167,10 @@ class BalerinaSimulator {
 if (typeof document !== 'undefined') {
   document.addEventListener('DOMContentLoaded', () => {
     const container = document.getElementById('simulator-container');
+    const controlPanelContainer = document.getElementById('control-panel');
+    
     if (container) {
-      const simulator = new BalerinaSimulator(container);
+      const simulator = new BalerinaSimulator(container, controlPanelContainer || undefined);
       simulator.start();
       
       // Expose to global scope for debugging

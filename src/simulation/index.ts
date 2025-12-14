@@ -97,6 +97,13 @@ export class SimulationEngine {
   }
   
   /**
+   * Get simulation configuration (read-only)
+   */
+  getConfig(): Readonly<SimulationConfig> {
+    return this.config;
+  }
+  
+  /**
    * Update operator controls (targets for ramping)
    * 
    * @param controls - New target control values
