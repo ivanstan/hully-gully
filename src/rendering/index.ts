@@ -543,8 +543,9 @@ export class RenderingEngine {
         seatHeight
       );
       
-      // Rotate seat to face outward (away from center)
-      seat.rotation.z = angle + Math.PI / 2;
+      // Rotate seat to face forward (tangent to rotation direction)
+      // For CCW rotation, forward is 90° ahead of radial direction
+      seat.rotation.z = angle;
       
       this.windmillGroup!.add(seat);
       this.cabinGroups.push(seat);
@@ -557,54 +558,54 @@ export class RenderingEngine {
   private createSeat(index: number): THREE.Group {
     const seat = new THREE.Group();
     
-    // Seat colors
-    const seatColors = [
-      0xff3333, // Red (seat 0 - tracker)
-      0x3366ff, // Blue
-      0x33cc33, // Green
-      0xffcc00, // Yellow
-      0xff66cc, // Pink
-      0x00cccc, // Cyan
-      0xff6600, // Orange
-      0x9933ff, // Purple
-    ];
+    // Seat colors: seat 0 is pink (reference), all others white
+    const seatColor = index === 0 ? 0xff69b4 : 0xffffff;  // Pink for seat 1, white for rest
     
     const seatMaterial = new THREE.MeshStandardMaterial({
-      color: seatColors[index % seatColors.length],
+      color: seatColor,
       metalness: 0.1,
       roughness: 0.7,
     });
     
+    // Two-seater bench - wider seat
+    const seatWidth = 1.4;  // Wide enough for two people
+    
     // Seat cushion
-    const cushionGeom = new THREE.BoxGeometry(0.6, 0.5, 0.15);
+    const cushionGeom = new THREE.BoxGeometry(seatWidth, 0.5, 0.15);
     const cushion = new THREE.Mesh(cushionGeom, seatMaterial);
     cushion.position.set(0, 0, 0.1);
     cushion.castShadow = true;
     seat.add(cushion);
     
     // Seat back
-    const backGeom = new THREE.BoxGeometry(0.6, 0.1, 0.7);
+    const backGeom = new THREE.BoxGeometry(seatWidth, 0.1, 0.7);
     const back = new THREE.Mesh(backGeom, seatMaterial);
     back.position.set(0, -0.25, 0.45);
     back.castShadow = true;
     seat.add(back);
     
-    // Safety bar
-    const barGeom = new THREE.CylinderGeometry(0.03, 0.03, 0.5, 8);
+    // Safety bar (wider for two-seater)
+    const barGeom = new THREE.CylinderGeometry(0.03, 0.03, seatWidth, 8);
     const bar = new THREE.Mesh(barGeom, this.materials.safetyBar);
     bar.rotation.x = Math.PI / 2;
     bar.position.set(0, 0.25, 0.35);
     seat.add(bar);
     
-    // Bar supports
+    // Bar supports (at each end of the bench)
     const supportGeom = new THREE.CylinderGeometry(0.025, 0.025, 0.3, 8);
     const supportL = new THREE.Mesh(supportGeom, this.materials.chrome);
-    supportL.position.set(-0.2, 0.2, 0.2);
+    supportL.position.set(-seatWidth / 2 + 0.1, 0.2, 0.2);
     seat.add(supportL);
     
     const supportR = new THREE.Mesh(supportGeom, this.materials.chrome);
-    supportR.position.set(0.2, 0.2, 0.2);
+    supportR.position.set(seatWidth / 2 - 0.1, 0.2, 0.2);
     seat.add(supportR);
+    
+    // Center divider armrest
+    const dividerGeom = new THREE.BoxGeometry(0.08, 0.3, 0.15);
+    const divider = new THREE.Mesh(dividerGeom, this.materials.chrome);
+    divider.position.set(0, 0, 0.2);
+    seat.add(divider);
     
     return seat;
   }
