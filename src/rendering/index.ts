@@ -601,8 +601,9 @@ export class RenderingEngine {
           // Scale and position the model
           // Adjust these values based on the actual model dimensions
           // The model's Y-axis becomes Z in the windmill's local coords
-          model.scale.set(2.5, 2.5, 2.5);  // Larger scale for visibility
-          model.position.z = innerHeight + 0.5;  // Position above the skirt
+          model.scale.set(3.5, 3.5, 3.5);  // Scaled up for better proportion with skirt
+          model.position.z = innerHeight - 3.0;  // Lowered so waist is at skirt level
+          model.position.y = 0;
           
           // Rotate to stand upright
           // GLTF models are Y-up, windmill group is Z-up
