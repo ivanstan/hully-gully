@@ -2356,7 +2356,7 @@ export class RenderingEngine {
         const lensMat = new THREE.MeshStandardMaterial({
           color: reflectorColor,
           emissive: reflectorColor,
-          emissiveIntensity: 2.0,  // Moderate glow
+          emissiveIntensity: 4.0,  // Bright glow
           side: THREE.DoubleSide
         });
         const lens = new THREE.Mesh(lensGeom, lensMat);
@@ -2368,7 +2368,7 @@ export class RenderingEngine {
         
         // Calculate beam length (distance to platform center)
         const distToCenter = Math.sqrt(lensX * lensX + lensZ * lensZ);
-        const beamLength = distToCenter * 0.75;  // Beam reaches toward center
+        const beamLength = distToCenter * 1.1;  // Long beam that reaches past center
         
         // Create visible light beam cone (narrow at source, wide at target)
         // Using CylinderGeometry: (radiusTop, radiusBottom, height)
@@ -2409,10 +2409,10 @@ export class RenderingEngine {
         
         speakerGroup.add(beam);
         
-        // SpotLight for actual lighting effect - moderate intensity
+        // SpotLight for actual lighting effect - very high intensity
         const spotLight = new THREE.SpotLight(
           reflectorColor, 
-          15,           // Moderate intensity (reduced from 50)
+          70,           // Very high intensity for dramatic lighting
           30,           // Good distance
           Math.PI / 10, // Narrower angle for focused beam
           0.4,          // Soft penumbra
@@ -3179,15 +3179,15 @@ export class RenderingEngine {
           ? intensity * (0.9 + Math.sin(time * 10 + i * 2) * 0.1)
           : intensity;
         
-        // Update lens glow - moderate brightness
-        lensMaterial.emissiveIntensity = 1.0 + flickerIntensity * 3.0;
+        // Update lens glow - very bright
+        lensMaterial.emissiveIntensity = 3.0 + flickerIntensity * 7.0;
         
-        // Update spotlight intensity - moderate when on
-        reflector.light.intensity = 2 + flickerIntensity * 20;
+        // Update spotlight intensity - very high for dramatic lighting on platform
+        reflector.light.intensity = 10 + flickerIntensity * 90;
         reflector.light.visible = true;
         
-        // Update beam visibility and opacity - subtle beams
-        beamMaterial.opacity = 0.01 + flickerIntensity * 0.08;  // Very subtle beam
+        // Update beam visibility and opacity - keep subtle
+        beamMaterial.opacity = 0.01 + flickerIntensity * 0.05;  // Very subtle beam
         reflector.beam.visible = true;
       }
     } else if (!this.lightShowEnabled) {
@@ -3424,10 +3424,10 @@ export class RenderingEngine {
       const lensMaterial = reflector.mesh.material as THREE.MeshStandardMaterial;
       const beamMaterial = reflector.beam.material as THREE.MeshBasicMaterial;
       if (enabled) {
-        lensMaterial.emissiveIntensity = 1.5;
+        lensMaterial.emissiveIntensity = 3.0;
         reflector.light.visible = true;
         reflector.beam.visible = true;
-        beamMaterial.opacity = 0.04;
+        beamMaterial.opacity = 0.03;
       } else {
         lensMaterial.emissiveIntensity = 0.3;
         reflector.light.visible = false;
