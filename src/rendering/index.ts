@@ -81,6 +81,9 @@ export class RenderingEngine {
   // Radius indicator bar
   private radiusBar: THREE.Mesh | null = null;
   
+  // Fork arm connecting pivot to secondary platform center
+  private forkArmGroup: THREE.Group | null = null;
+  
   // Visualization options
   private forceArrows: THREE.ArrowHelper[] = [];
   private showForceVectors: boolean = false;
@@ -470,6 +473,9 @@ export class RenderingEngine {
     // Create the radius indicator bar
     this.createRadiusBar();
     
+    // Create the fork arm that holds the secondary platform
+    this.createForkArm();
+    
     this.scene.add(this.platformGroup);
   }
   
@@ -546,6 +552,179 @@ export class RenderingEngine {
     // Negate the angle because Three.js Y-rotation convention: +X rotates toward -Z
     this.radiusBar.position.set(barCenterX, 0.38, barCenterZ);
     this.radiusBar.rotation.y = -platformPhase;  // Align bar along the pivot-to-opposite direction
+  }
+  
+  /**
+   * Create the fork arm that holds the secondary platform
+   * The fork connects from the pivot point to the center of the secondary platform
+   */
+  private createForkArm(): void {
+    this.forkArmGroup = new THREE.Group();
+    
+    // Fork arm material - sturdy metallic appearance
+    const forkMaterial = new THREE.MeshStandardMaterial({
+      color: 0x555555,
+      metalness: 0.85,
+      roughness: 0.25,
+    });
+    
+    // Main arm beam - will be dynamically sized based on distance
+    // Initial geometry - will be updated in updateForkArm
+    const armGeom = new THREE.BoxGeometry(1, 0.3, 0.4);
+    const armMesh = new THREE.Mesh(armGeom, forkMaterial);
+    armMesh.name = 'forkArmBeam';
+    armMesh.castShadow = true;
+    armMesh.receiveShadow = true;
+    this.forkArmGroup.add(armMesh);
+    
+    // Pivot end cap (at pivot point) - cylindrical joint
+    const pivotCapGeom = new THREE.CylinderGeometry(0.35, 0.35, 0.5, 16);
+    const pivotCap = new THREE.Mesh(pivotCapGeom, this.materials.chrome);
+    pivotCap.name = 'pivotCap';
+    pivotCap.rotation.x = Math.PI / 2;  // Align cylinder horizontally
+    pivotCap.castShadow = true;
+    this.forkArmGroup.add(pivotCap);
+    
+    // Secondary platform end cap - circular mounting plate
+    const platCapGeom = new THREE.CylinderGeometry(0.5, 0.4, 0.3, 16);
+    const platCap = new THREE.Mesh(platCapGeom, this.materials.chrome);
+    platCap.name = 'platCap';
+    platCap.rotation.x = Math.PI / 2;  // Will be oriented toward secondary platform
+    platCap.castShadow = true;
+    this.forkArmGroup.add(platCap);
+    
+    // Add structural reinforcement ribs along the arm
+    const ribMaterial = new THREE.MeshStandardMaterial({
+      color: 0x666666,
+      metalness: 0.8,
+      roughness: 0.3,
+    });
+    
+    for (let i = 0; i < 3; i++) {
+      const ribGeom = new THREE.BoxGeometry(0.08, 0.5, 0.5);
+      const rib = new THREE.Mesh(ribGeom, ribMaterial);
+      rib.name = `rib${i}`;
+      rib.castShadow = true;
+      this.forkArmGroup.add(rib);
+    }
+    
+    this.scene.add(this.forkArmGroup);
+  }
+  
+  /**
+   * Update the fork arm position and orientation
+   * Connects pivot point to secondary platform center
+   */
+  private updateForkArm(state: SimulationState): void {
+    if (!this.forkArmGroup) return;
+    
+    const pivotRadius = state.tilt.pivotRadius;
+    const platformPhase = state.platformPhase;
+    const tiltAngle = state.tilt.tiltAngle;
+    const offset = state.tilt.secondaryPlatformOffset;
+    
+    // Calculate pivot point in world coordinates
+    const pivotWorldX = pivotRadius * Math.cos(platformPhase);
+    const pivotWorldY = 0.38;  // Same height as radius bar
+    const pivotWorldZ = pivotRadius * Math.sin(platformPhase);
+    
+    // Calculate secondary platform center (same logic as in update method)
+    const centerOffsetX_plat = -offset * Math.cos(tiltAngle);
+    const centerOffsetZ_plat = offset * Math.sin(tiltAngle);
+    
+    const centerX_plat = pivotRadius + centerOffsetX_plat;
+    const centerY_plat = 0;
+    const centerZ_plat = centerOffsetZ_plat;
+    
+    const platCenterWorldX = centerX_plat * Math.cos(platformPhase) - centerY_plat * Math.sin(platformPhase);
+    const platCenterWorldY = centerZ_plat + 0.5;  // Y in world is Z in platform coords + base height
+    const platCenterWorldZ = centerX_plat * Math.sin(platformPhase) + centerY_plat * Math.cos(platformPhase);
+    
+    // Vector from pivot to platform center
+    const dx = platCenterWorldX - pivotWorldX;
+    const dy = platCenterWorldY - pivotWorldY;
+    const dz = platCenterWorldZ - pivotWorldZ;
+    const fullLength = Math.sqrt(dx * dx + dy * dy + dz * dz);
+    
+    // Direction vector (normalized)
+    const dirX = dx / fullLength;
+    const dirY = dy / fullLength;
+    const dirZ = dz / fullLength;
+    
+    // Inset the fork arm start point away from the pivot edge to avoid clipping
+    const pivotInset = 1.5;  // Distance to move inward from pivot point
+    const forkStartX = pivotWorldX + dirX * pivotInset;
+    const forkStartY = pivotWorldY + dirY * pivotInset;
+    const forkStartZ = pivotWorldZ + dirZ * pivotInset;
+    
+    // Adjusted arm length (shorter due to inset)
+    const armLength = fullLength - pivotInset;
+    
+    // Midpoint of the arm (between inset start and platform center)
+    const midX = (forkStartX + platCenterWorldX) / 2;
+    const midY = (forkStartY + platCenterWorldY) / 2;
+    const midZ = (forkStartZ + platCenterWorldZ) / 2;
+    
+    // Get the arm beam mesh and update it
+    const armMesh = this.forkArmGroup.getObjectByName('forkArmBeam') as THREE.Mesh;
+    if (armMesh) {
+      // Update geometry if length changed
+      const currentGeom = armMesh.geometry as THREE.BoxGeometry;
+      if (Math.abs(currentGeom.parameters.width - armLength) > 0.01) {
+        armMesh.geometry.dispose();
+        armMesh.geometry = new THREE.BoxGeometry(armLength, 0.3, 0.4);
+      }
+      
+      // Position at midpoint
+      armMesh.position.set(midX, midY, midZ);
+      
+      // Orient along the direction vector
+      // Calculate rotation to align X-axis with direction vector
+      const direction = new THREE.Vector3(dirX, dirY, dirZ);
+      const quaternion = new THREE.Quaternion();
+      quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), direction);
+      armMesh.quaternion.copy(quaternion);
+    }
+    
+    // Position pivot cap at the inset fork start point (not at pivot edge)
+    const pivotCap = this.forkArmGroup.getObjectByName('pivotCap') as THREE.Mesh;
+    if (pivotCap) {
+      pivotCap.position.set(forkStartX, forkStartY, forkStartZ);
+      // Orient perpendicular to arm direction
+      const perpDir = new THREE.Vector3(-dirZ, 0, dirX).normalize();
+      const capQuat = new THREE.Quaternion();
+      capQuat.setFromUnitVectors(new THREE.Vector3(0, 1, 0), perpDir);
+      pivotCap.quaternion.copy(capQuat);
+    }
+    
+    // Position platform cap at secondary platform center
+    const platCap = this.forkArmGroup.getObjectByName('platCap') as THREE.Mesh;
+    if (platCap) {
+      platCap.position.set(platCenterWorldX, platCenterWorldY, platCenterWorldZ);
+      // Orient along arm direction (pointing into platform)
+      const armDir = new THREE.Vector3(dirX, dirY, dirZ);
+      const platCapQuat = new THREE.Quaternion();
+      platCapQuat.setFromUnitVectors(new THREE.Vector3(0, 1, 0), armDir);
+      platCap.quaternion.copy(platCapQuat);
+    }
+    
+    // Position ribs along the arm (from inset start to platform center)
+    for (let i = 0; i < 3; i++) {
+      const rib = this.forkArmGroup.getObjectByName(`rib${i}`) as THREE.Mesh;
+      if (rib) {
+        const t = 0.25 + (i * 0.25);  // Position at 25%, 50%, 75% along arm
+        const ribX = forkStartX + (platCenterWorldX - forkStartX) * t;
+        const ribY = forkStartY + (platCenterWorldY - forkStartY) * t;
+        const ribZ = forkStartZ + (platCenterWorldZ - forkStartZ) * t;
+        rib.position.set(ribX, ribY, ribZ);
+        
+        // Orient rib perpendicular to arm
+        const direction = new THREE.Vector3(dirX, dirY, dirZ);
+        const ribQuat = new THREE.Quaternion();
+        ribQuat.setFromUnitVectors(new THREE.Vector3(1, 0, 0), direction);
+        rib.quaternion.copy(ribQuat);
+      }
+    }
   }
   
   /**
@@ -1327,6 +1506,9 @@ export class RenderingEngine {
     // Update radius bar so one end stays at pivot point
     this.updateRadiusBar(state.tilt.pivotRadius, state.platformPhase);
     
+    // Update fork arm connecting pivot to secondary platform center
+    this.updateForkArm(state);
+    
     // Calculate secondary platform center
     const tiltAngle = state.tilt.tiltAngle;
     const offset = state.tilt.secondaryPlatformOffset;
@@ -1600,6 +1782,19 @@ export class RenderingEngine {
       this.scene.remove(light);
       light.dispose();
     });
+    
+    // Dispose fork arm
+    if (this.forkArmGroup) {
+      this.forkArmGroup.traverse((child) => {
+        if (child instanceof THREE.Mesh) {
+          child.geometry.dispose();
+          if (child.material instanceof THREE.Material) {
+            child.material.dispose();
+          }
+        }
+      });
+      this.scene.remove(this.forkArmGroup);
+    }
     
     this.controls.dispose();
     this.composer.dispose();
