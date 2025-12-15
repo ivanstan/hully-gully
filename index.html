@@ -1147,6 +1147,13 @@
     <div id="visual-options-panel">
         <h3>🎨 Visual Options</h3>
         <div class="option-row">
+            <label for="daynight-toggle">🌙 Night / ☀️ Day</label>
+            <label class="toggle-switch">
+                <input type="checkbox" id="daynight-toggle">
+                <span class="toggle-slider"></span>
+            </label>
+        </div>
+        <div class="option-row">
             <label for="lights-toggle">Overskirt Lights</label>
             <label class="toggle-switch">
                 <input type="checkbox" id="lights-toggle" checked>
@@ -1215,8 +1222,26 @@
         document.addEventListener('DOMContentLoaded', () => {
             // Wait a bit for simulator to initialize
             setTimeout(() => {
+                const daynightToggle = document.getElementById('daynight-toggle');
                 const lightsToggle = document.getElementById('lights-toggle');
                 const underskirtLightsToggle = document.getElementById('underskirt-lights-toggle');
+                
+                // Day/Night toggle: unchecked = night (default), checked = day
+                if (daynightToggle) {
+                    daynightToggle.addEventListener('change', (e) => {
+                        if (window.simulator) {
+                            // checked = day mode, unchecked = night mode
+                            const isDay = e.target.checked;
+                            window.simulator.getRendering().setDayNightMode(!isDay);
+                            
+                            // When switching to day, turn off lights and update toggles
+                            if (isDay) {
+                                if (lightsToggle) lightsToggle.checked = false;
+                                if (underskirtLightsToggle) underskirtLightsToggle.checked = false;
+                            }
+                        }
+                    });
+                }
                 
                 if (lightsToggle) {
                     lightsToggle.addEventListener('change', (e) => {

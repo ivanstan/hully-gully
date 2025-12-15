@@ -92,6 +92,13 @@ export class RenderingEngine {
   private showGForceColors: boolean = false;
   private lightsEnabled: boolean = true;  // Decorative lights on/off
   
+  // Day/Night mode
+  private isNightMode: boolean = true;  // Start in night mode (matches current dark theme)
+  private skyMesh: THREE.Mesh | null = null;
+  private starField: THREE.Points | null = null;
+  private sunLight: THREE.DirectionalLight | null = null;
+  private hemiLight: THREE.HemisphereLight | null = null;
+  
   // UI elements
   private axisHelperCanvas: HTMLCanvasElement | null = null;
   private axisHelperContainer: HTMLElement | null = null;
@@ -270,6 +277,7 @@ export class RenderingEngine {
   
   /**
    * Create procedural environment map for reflections
+   * Adapts to day/night mode
    */
   private createEnvironmentMap(): void {
     const pmremGenerator = new THREE.PMREMGenerator(this.renderer);
@@ -278,13 +286,16 @@ export class RenderingEngine {
     // Create a simple gradient sky environment
     const envScene = new THREE.Scene();
     
-    // Sky gradient using a large sphere
+    // Sky gradient using a large sphere - colors based on day/night mode
     const skyGeometry = new THREE.SphereGeometry(50, 32, 32);
+    const topColor = this.isNightMode ? new THREE.Color(0x0a0a20) : new THREE.Color(0x4a90d9);
+    const bottomColor = this.isNightMode ? new THREE.Color(0x1a1a30) : new THREE.Color(0x87ceeb);
+    
     const skyMaterial = new THREE.ShaderMaterial({
       side: THREE.BackSide,
       uniforms: {
-        topColor: { value: new THREE.Color(0x0a0a20) },
-        bottomColor: { value: new THREE.Color(0x1a1a30) },
+        topColor: { value: topColor },
+        bottomColor: { value: bottomColor },
         offset: { value: 10 },
         exponent: { value: 0.6 }
       },
@@ -313,12 +324,24 @@ export class RenderingEngine {
     
     // Add some fake lights to the environment
     const lightGeom = new THREE.SphereGeometry(2, 8, 8);
-    const lightMat = new THREE.MeshBasicMaterial({ color: 0xffffaa });
-    for (let i = 0; i < 6; i++) {
-      const light = new THREE.Mesh(lightGeom, lightMat);
-      const angle = (i / 6) * Math.PI * 2;
-      light.position.set(Math.cos(angle) * 30, 15 + Math.sin(angle * 2) * 5, Math.sin(angle) * 30);
-      envScene.add(light);
+    const lightColor = this.isNightMode ? 0xffffaa : 0xffffff;
+    const lightMat = new THREE.MeshBasicMaterial({ color: lightColor });
+    
+    if (this.isNightMode) {
+      // Night: subtle lights
+      for (let i = 0; i < 6; i++) {
+        const light = new THREE.Mesh(lightGeom, lightMat);
+        const angle = (i / 6) * Math.PI * 2;
+        light.position.set(Math.cos(angle) * 30, 15 + Math.sin(angle * 2) * 5, Math.sin(angle) * 30);
+        envScene.add(light);
+      }
+    } else {
+      // Day: add a sun to the environment
+      const sunGeom = new THREE.SphereGeometry(8, 16, 16);
+      const sunMat = new THREE.MeshBasicMaterial({ color: 0xffffee });
+      const sun = new THREE.Mesh(sunGeom, sunMat);
+      sun.position.set(25, 35, 15);
+      envScene.add(sun);
     }
     
     const envMap = pmremGenerator.fromScene(envScene, 0.04).texture;
@@ -362,25 +385,25 @@ export class RenderingEngine {
    */
   private setupLighting(): void {
     // Hemisphere light for natural ambient (sky/ground)
-    const hemiLight = new THREE.HemisphereLight(0x4466aa, 0x222222, 0.5);
-    hemiLight.position.set(0, 50, 0);
-    this.scene.add(hemiLight);
+    this.hemiLight = new THREE.HemisphereLight(0x4466aa, 0x222222, 0.5);
+    this.hemiLight.position.set(0, 50, 0);
+    this.scene.add(this.hemiLight);
     
     // Main directional light (sun/key light)
-    const keyLight = new THREE.DirectionalLight(0xfff5e6, 1.2);
-    keyLight.position.set(20, 30, 15);
-    keyLight.castShadow = true;
-    keyLight.shadow.mapSize.width = 2048;
-    keyLight.shadow.mapSize.height = 2048;
-    keyLight.shadow.camera.near = 1;
-    keyLight.shadow.camera.far = 100;
-    keyLight.shadow.camera.left = -30;
-    keyLight.shadow.camera.right = 30;
-    keyLight.shadow.camera.top = 30;
-    keyLight.shadow.camera.bottom = -30;
-    keyLight.shadow.bias = -0.0001;
-    keyLight.shadow.normalBias = 0.02;
-    this.scene.add(keyLight);
+    this.sunLight = new THREE.DirectionalLight(0xfff5e6, 1.2);
+    this.sunLight.position.set(20, 30, 15);
+    this.sunLight.castShadow = true;
+    this.sunLight.shadow.mapSize.width = 2048;
+    this.sunLight.shadow.mapSize.height = 2048;
+    this.sunLight.shadow.camera.near = 1;
+    this.sunLight.shadow.camera.far = 100;
+    this.sunLight.shadow.camera.left = -30;
+    this.sunLight.shadow.camera.right = 30;
+    this.sunLight.shadow.camera.top = 30;
+    this.sunLight.shadow.camera.bottom = -30;
+    this.sunLight.shadow.bias = -0.0001;
+    this.sunLight.shadow.normalBias = 0.02;
+    this.scene.add(this.sunLight);
     
     // Fill light (cooler, opposite side)
     const fillLight = new THREE.DirectionalLight(0x6688cc, 0.4);
@@ -396,6 +419,10 @@ export class RenderingEngine {
     const bounceLight = new THREE.DirectionalLight(0x443322, 0.2);
     bounceLight.position.set(0, -10, 0);
     this.scene.add(bounceLight);
+    
+    // Create sky and stars
+    this.createSky();
+    this.createStarField();
   }
   
   /**
@@ -426,6 +453,260 @@ export class RenderingEngine {
     const gridHelper = new THREE.GridHelper(100, 50, 0x222233, 0x111122);
     gridHelper.position.y = 0.01;
     this.scene.add(gridHelper);
+  }
+  
+  /**
+   * Create sky dome with gradient shader
+   * Supports both day (sunny) and night (dark) modes
+   */
+  private createSky(): void {
+    const skyGeometry = new THREE.SphereGeometry(200, 32, 32);
+    const skyMaterial = new THREE.ShaderMaterial({
+      side: THREE.BackSide,
+      uniforms: {
+        topColor: { value: new THREE.Color(0x0a0a20) },
+        bottomColor: { value: new THREE.Color(0x1a1a30) },
+        sunPosition: { value: new THREE.Vector3(0.5, 0.8, 0.3) },
+        sunIntensity: { value: 0.0 },  // 0 for night, 1 for day
+      },
+      vertexShader: `
+        varying vec3 vWorldPosition;
+        varying vec3 vNormal;
+        void main() {
+          vec4 worldPosition = modelMatrix * vec4(position, 1.0);
+          vWorldPosition = worldPosition.xyz;
+          vNormal = normalize(normalMatrix * normal);
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: `
+        uniform vec3 topColor;
+        uniform vec3 bottomColor;
+        uniform vec3 sunPosition;
+        uniform float sunIntensity;
+        varying vec3 vWorldPosition;
+        
+        void main() {
+          // Basic gradient from bottom to top
+          float h = normalize(vWorldPosition).y;
+          vec3 gradient = mix(bottomColor, topColor, max(h * 0.5 + 0.5, 0.0));
+          
+          // Sun glow for day mode
+          vec3 sunDir = normalize(sunPosition);
+          vec3 viewDir = normalize(vWorldPosition);
+          float sunDot = max(dot(viewDir, sunDir), 0.0);
+          
+          // Sun disc
+          float sunDisc = smoothstep(0.997, 0.999, sunDot);
+          vec3 sunColor = vec3(1.0, 0.95, 0.8);
+          
+          // Sun glow (halo around sun)
+          float sunGlow = pow(sunDot, 8.0) * 0.5;
+          vec3 glowColor = vec3(1.0, 0.85, 0.6);
+          
+          // Combine
+          vec3 finalColor = gradient;
+          finalColor += sunColor * sunDisc * sunIntensity;
+          finalColor += glowColor * sunGlow * sunIntensity;
+          
+          gl_FragColor = vec4(finalColor, 1.0);
+        }
+      `
+    });
+    
+    this.skyMesh = new THREE.Mesh(skyGeometry, skyMaterial);
+    this.scene.add(this.skyMesh);
+  }
+  
+  /**
+   * Create star field for night sky
+   */
+  private createStarField(): void {
+    const starCount = 2000;
+    const starGeometry = new THREE.BufferGeometry();
+    const positions = new Float32Array(starCount * 3);
+    const sizes = new Float32Array(starCount);
+    const colors = new Float32Array(starCount * 3);
+    
+    for (let i = 0; i < starCount; i++) {
+      // Distribute stars on a sphere
+      const theta = Math.random() * Math.PI * 2;
+      const phi = Math.acos((Math.random() * 2) - 1);
+      const radius = 180 + Math.random() * 10;
+      
+      // Only show stars in upper hemisphere
+      const y = radius * Math.cos(phi);
+      if (y < -10) {
+        // Re-roll for stars below horizon
+        const newPhi = Math.acos(Math.random() * 0.9);  // Bias toward upper hemisphere
+        positions[i * 3] = radius * Math.sin(newPhi) * Math.cos(theta);
+        positions[i * 3 + 1] = radius * Math.cos(newPhi);
+        positions[i * 3 + 2] = radius * Math.sin(newPhi) * Math.sin(theta);
+      } else {
+        positions[i * 3] = radius * Math.sin(phi) * Math.cos(theta);
+        positions[i * 3 + 1] = y;
+        positions[i * 3 + 2] = radius * Math.sin(phi) * Math.sin(theta);
+      }
+      
+      // Random star sizes
+      sizes[i] = 0.5 + Math.random() * 2.5;
+      
+      // Star colors (mostly white, some slightly blue or yellow)
+      const colorVariation = Math.random();
+      if (colorVariation < 0.7) {
+        // White stars
+        colors[i * 3] = 1.0;
+        colors[i * 3 + 1] = 1.0;
+        colors[i * 3 + 2] = 1.0;
+      } else if (colorVariation < 0.85) {
+        // Blue-ish stars
+        colors[i * 3] = 0.8;
+        colors[i * 3 + 1] = 0.9;
+        colors[i * 3 + 2] = 1.0;
+      } else {
+        // Yellow-ish stars
+        colors[i * 3] = 1.0;
+        colors[i * 3 + 1] = 0.95;
+        colors[i * 3 + 2] = 0.8;
+      }
+    }
+    
+    starGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    starGeometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+    starGeometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    
+    const starMaterial = new THREE.ShaderMaterial({
+      uniforms: {
+        opacity: { value: 1.0 }
+      },
+      vertexShader: `
+        attribute float size;
+        attribute vec3 color;
+        varying vec3 vColor;
+        void main() {
+          vColor = color;
+          vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+          gl_PointSize = size * (300.0 / -mvPosition.z);
+          gl_Position = projectionMatrix * mvPosition;
+        }
+      `,
+      fragmentShader: `
+        uniform float opacity;
+        varying vec3 vColor;
+        void main() {
+          // Circular star with soft edge
+          vec2 center = gl_PointCoord - vec2(0.5);
+          float dist = length(center);
+          float alpha = 1.0 - smoothstep(0.3, 0.5, dist);
+          
+          // Twinkle effect can be added here if needed
+          gl_FragColor = vec4(vColor, alpha * opacity);
+        }
+      `,
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending
+    });
+    
+    this.starField = new THREE.Points(starGeometry, starMaterial);
+    this.scene.add(this.starField);
+  }
+  
+  /**
+   * Set day or night mode
+   * @param isNight - true for night mode, false for day mode
+   */
+  setDayNightMode(isNight: boolean): void {
+    this.isNightMode = isNight;
+    
+    if (isNight) {
+      // Night mode
+      this.scene.background = new THREE.Color(0x0a0a15);
+      this.scene.fog = new THREE.Fog(0x0a0a15, 50, 150);
+      
+      // Update sky shader
+      if (this.skyMesh) {
+        const material = this.skyMesh.material as THREE.ShaderMaterial;
+        material.uniforms.topColor.value.setHex(0x0a0a20);
+        material.uniforms.bottomColor.value.setHex(0x1a1a30);
+        material.uniforms.sunIntensity.value = 0.0;
+      }
+      
+      // Show stars
+      if (this.starField) {
+        this.starField.visible = true;
+      }
+      
+      // Dim lighting for night
+      if (this.sunLight) {
+        this.sunLight.intensity = 0.3;
+        this.sunLight.color.setHex(0x8888aa);  // Moonlight color
+      }
+      
+      if (this.hemiLight) {
+        this.hemiLight.intensity = 0.3;
+        this.hemiLight.color.setHex(0x4466aa);
+        this.hemiLight.groundColor.setHex(0x222222);
+      }
+      
+      // Update ground material for night
+      this.materials.ground.color.setHex(0x1a1a1a);
+      
+    } else {
+      // Day mode
+      this.scene.background = new THREE.Color(0x87ceeb);  // Sky blue
+      this.scene.fog = new THREE.Fog(0x87ceeb, 80, 200);
+      
+      // Update sky shader for sunny day
+      if (this.skyMesh) {
+        const material = this.skyMesh.material as THREE.ShaderMaterial;
+        material.uniforms.topColor.value.setHex(0x4a90d9);  // Deep sky blue
+        material.uniforms.bottomColor.value.setHex(0x87ceeb);  // Light sky blue
+        material.uniforms.sunIntensity.value = 1.0;
+      }
+      
+      // Hide stars
+      if (this.starField) {
+        this.starField.visible = false;
+      }
+      
+      // Bright sunlight for day
+      if (this.sunLight) {
+        this.sunLight.intensity = 1.5;
+        this.sunLight.color.setHex(0xfff5e6);  // Warm sunlight
+      }
+      
+      if (this.hemiLight) {
+        this.hemiLight.intensity = 0.8;
+        this.hemiLight.color.setHex(0x87ceeb);  // Sky blue ambient
+        this.hemiLight.groundColor.setHex(0x8b7355);  // Warm ground bounce
+      }
+      
+      // Update ground material for day
+      this.materials.ground.color.setHex(0x3a3a3a);  // Slightly lighter ground
+      
+      // Turn off all decorative lights during day
+      this.setLightsEnabled(false);
+      this.setUnderskirtLightsEnabled(false);
+    }
+    
+    // Recreate environment map for reflections
+    this.createEnvironmentMap();
+  }
+  
+  /**
+   * Get current day/night mode
+   * @returns true if night mode, false if day mode
+   */
+  getIsNightMode(): boolean {
+    return this.isNightMode;
+  }
+  
+  /**
+   * Toggle between day and night mode
+   */
+  toggleDayNight(): void {
+    this.setDayNightMode(!this.isNightMode);
   }
   
   /**
