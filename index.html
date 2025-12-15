@@ -1147,9 +1147,16 @@
     <div id="visual-options-panel">
         <h3>🎨 Visual Options</h3>
         <div class="option-row">
-            <label for="lights-toggle">Decorative Lights</label>
+            <label for="lights-toggle">Overskirt Lights</label>
             <label class="toggle-switch">
                 <input type="checkbox" id="lights-toggle" checked>
+                <span class="toggle-slider"></span>
+            </label>
+        </div>
+        <div class="option-row">
+            <label for="underskirt-lights-toggle">Underskirt Lights</label>
+            <label class="toggle-switch">
+                <input type="checkbox" id="underskirt-lights-toggle" checked>
                 <span class="toggle-slider"></span>
             </label>
         </div>
@@ -1209,11 +1216,20 @@
             // Wait a bit for simulator to initialize
             setTimeout(() => {
                 const lightsToggle = document.getElementById('lights-toggle');
+                const underskirtLightsToggle = document.getElementById('underskirt-lights-toggle');
                 
                 if (lightsToggle) {
                     lightsToggle.addEventListener('change', (e) => {
                         if (window.simulator) {
                             window.simulator.getRendering().setLightsEnabled(e.target.checked);
+                        }
+                    });
+                }
+                
+                if (underskirtLightsToggle) {
+                    underskirtLightsToggle.addEventListener('change', (e) => {
+                        if (window.simulator) {
+                            window.simulator.getRendering().setUnderskirtLightsEnabled(e.target.checked);
                         }
                     });
                 }

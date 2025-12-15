@@ -79,6 +79,11 @@ export class RenderingEngine {
   private platformMesh: THREE.Mesh | null = null;
   private eccentricMesh: THREE.Mesh | null = null;
   
+  // Radius indicator bar
+  private radiusBar: THREE.Mesh | null = null;
+  private radiusBarCapNeg: THREE.Mesh | null = null;
+  private radiusBarCapPos: THREE.Mesh | null = null;
+  
   // Visualization options
   private forceArrows: THREE.ArrowHelper[] = [];
   private showForceVectors: boolean = false;
@@ -465,7 +470,122 @@ export class RenderingEngine {
       this.platformGroup.add(ring);
     }
     
+    // Create the radius indicator bar
+    this.createRadiusBar();
+    
     this.scene.add(this.platformGroup);
+  }
+  
+  /**
+   * Create a wide metal bar that lies on the platform plane
+   * One end is fixed at the pivot point, extends through center to opposite edge
+   * Positioned in world coordinates (not as child of platformGroup) to match pivot marker
+   */
+  private createRadiusBar(): void {
+    // Bar dimensions
+    const barWidth = 2.4;   // 3x wider
+    const barHeight = 0.15; // Thickness of the bar
+    
+    // Initial bar length - full diameter
+    const initialBarLength = this.platformRadius * 2;
+    
+    // Create bar geometry - box oriented along X axis
+    const barGeom = new THREE.BoxGeometry(initialBarLength, barHeight, barWidth);
+    
+    // Create metallic material for the bar
+    const barMaterial = new THREE.MeshStandardMaterial({
+      color: 0xaaaaaa,    // Silver/steel color
+      metalness: 0.9,
+      roughness: 0.2,
+    });
+    
+    this.radiusBar = new THREE.Mesh(barGeom, barMaterial);
+    this.radiusBar.position.set(0, 0.38, 0);
+    this.radiusBar.castShadow = true;
+    this.radiusBar.receiveShadow = true;
+    
+    // Add decorative end caps
+    const capGeom = new THREE.CylinderGeometry(barWidth / 2, barWidth / 2, barHeight + 0.02, 16);
+    
+    // Pivot end cap - orange/red to match pivot marker
+    const pivotCapMaterial = new THREE.MeshStandardMaterial({
+      color: 0xff4400,
+      metalness: 0.6,
+      roughness: 0.3,
+      emissive: 0xff4400,
+      emissiveIntensity: 0.2,
+    });
+    
+    // Regular end cap - chrome
+    const capMaterial = new THREE.MeshStandardMaterial({
+      color: 0xcccccc,
+      metalness: 1.0,
+      roughness: 0.1,
+    });
+    
+    // Cap at pivot point end
+    this.radiusBarCapPos = new THREE.Mesh(capGeom, pivotCapMaterial);
+    this.radiusBarCapPos.position.set(0, 0.38, 0);
+    this.radiusBarCapPos.castShadow = true;
+    
+    // Cap at opposite edge
+    this.radiusBarCapNeg = new THREE.Mesh(capGeom, capMaterial);
+    this.radiusBarCapNeg.position.set(0, 0.38, 0);
+    this.radiusBarCapNeg.castShadow = true;
+    
+    // Add to scene directly (NOT to platformGroup) - we'll position in world coords
+    this.scene.add(this.radiusBar);
+    this.scene.add(this.radiusBarCapPos);
+    this.scene.add(this.radiusBarCapNeg);
+  }
+  
+  /**
+   * Update the radius bar position in world coordinates
+   * One end always at the pivot point, other end at opposite edge of platform
+   * @param pivotRadius - Distance from platform center to pivot point
+   * @param platformPhase - Current rotation angle of the platform
+   */
+  private updateRadiusBar(pivotRadius: number, platformPhase: number): void {
+    if (!this.radiusBar || !this.radiusBarCapPos || !this.radiusBarCapNeg) return;
+    
+    const barWidth = 2.4;
+    const barHeight = 0.15;
+    
+    // Calculate pivot point position in world coordinates (same as pivot marker)
+    const pivotWorldX = pivotRadius * Math.cos(platformPhase);
+    const pivotWorldZ = pivotRadius * Math.sin(platformPhase);
+    
+    // Calculate opposite edge position in world coordinates
+    // Opposite edge is at -platformRadius in the same direction from center
+    const oppositeWorldX = -this.platformRadius * Math.cos(platformPhase);
+    const oppositeWorldZ = -this.platformRadius * Math.sin(platformPhase);
+    
+    // Bar length from pivot to opposite edge
+    const barLength = pivotRadius + this.platformRadius;
+    
+    // Bar center position
+    const barCenterX = (pivotWorldX + oppositeWorldX) / 2;
+    const barCenterZ = (pivotWorldZ + oppositeWorldZ) / 2;
+    
+    // Update bar geometry if length changed significantly
+    const currentGeom = this.radiusBar.geometry as THREE.BoxGeometry;
+    const currentLength = currentGeom.parameters.width;
+    
+    if (Math.abs(currentLength - barLength) > 0.01) {
+      this.radiusBar.geometry.dispose();
+      this.radiusBar.geometry = new THREE.BoxGeometry(barLength, barHeight, barWidth);
+    }
+    
+    // Position and rotate the bar in world coordinates
+    // Negate the angle because Three.js Y-rotation convention: +X rotates toward -Z
+    this.radiusBar.position.set(barCenterX, 0.38, barCenterZ);
+    this.radiusBar.rotation.y = -platformPhase;  // Align bar along the pivot-to-opposite direction
+    
+    // Position pivot end cap at pivot point
+    this.radiusBarCapPos.position.set(pivotWorldX, 0.38, pivotWorldZ);
+    
+    // Position opposite end cap
+    this.radiusBarCapNeg.position.set(oppositeWorldX, 0.38, oppositeWorldZ);
   }
   
   /**
@@ -1263,6 +1383,9 @@ export class RenderingEngine {
     if (this.platformGroup) {
       this.platformGroup.rotation.y = state.platformPhase;
     }
+    
+    // Update radius bar so one end stays at pivot point
+    this.updateRadiusBar(state.tilt.pivotRadius, state.platformPhase);
     
     // Calculate pivot point in world coordinates
     const pivotX_physics = state.tilt.pivotRadius;
