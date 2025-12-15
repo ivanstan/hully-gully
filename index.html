@@ -1195,6 +1195,76 @@
             0%, 100% { transform: scale(1); }
             50% { transform: scale(1.02); }
         }
+        
+        /* Strobe Button */
+        .strobo-btn {
+            width: 100%;
+            padding: 12px 16px;
+            font-size: 16px;
+            font-weight: bold;
+            color: #fff;
+            background: linear-gradient(180deg, #333, #1a1a1a);
+            border: 3px solid #666;
+            border-radius: 8px;
+            cursor: pointer;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            box-shadow: 
+                0 4px 15px rgba(0, 0, 0, 0.4),
+                inset 0 1px 0 rgba(255, 255, 255, 0.1);
+            transition: all 0.1s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            margin-top: 8px;
+        }
+        
+        .strobo-btn:hover {
+            background: linear-gradient(180deg, #444, #222);
+            box-shadow: 
+                0 6px 20px rgba(255, 255, 255, 0.2),
+                inset 0 1px 0 rgba(255, 255, 255, 0.2);
+            transform: translateY(-1px);
+        }
+        
+        .strobo-btn:active {
+            background: linear-gradient(180deg, #222, #111);
+            box-shadow: 
+                0 2px 8px rgba(0, 0, 0, 0.4),
+                inset 0 2px 4px rgba(0, 0, 0, 0.3);
+            transform: translateY(1px);
+        }
+        
+        .strobo-btn .strobo-icon {
+            font-size: 20px;
+        }
+        
+        .strobo-btn.active {
+            background: linear-gradient(180deg, #fff, #ccc);
+            color: #000;
+            border-color: #fff;
+            box-shadow: 
+                0 0 30px rgba(255, 255, 255, 0.8),
+                0 0 60px rgba(255, 255, 255, 0.4),
+                inset 0 1px 0 rgba(255, 255, 255, 0.5);
+            animation: strobo-flash 0.1s ease infinite;
+        }
+        
+        @keyframes strobo-flash {
+            0%, 100% { 
+                background: linear-gradient(180deg, #fff, #ccc);
+                box-shadow: 
+                    0 0 30px rgba(255, 255, 255, 0.8),
+                    0 0 60px rgba(255, 255, 255, 0.4);
+            }
+            50% { 
+                background: linear-gradient(180deg, #666, #333);
+                box-shadow: 
+                    0 0 10px rgba(255, 255, 255, 0.3),
+                    0 0 20px rgba(255, 255, 255, 0.1);
+            }
+        }
     </style>
 </head>
 <body>
@@ -1245,6 +1315,10 @@
             <button type="button" id="air-horn-btn" class="air-horn-btn">
                 <span class="horn-icon">📯</span>
                 <span>HORN</span>
+            </button>
+            <button type="button" id="strobo-btn" class="strobo-btn">
+                <span class="strobo-icon">⚡</span>
+                <span>STROBO</span>
             </button>
         </div>
     </div>
@@ -1426,6 +1500,25 @@
                             window.simulator.getRendering().setLightShowEnabled(e.target.checked);
                         }
                     });
+                }
+                
+                // Strobe button
+                const stroboBtn = document.getElementById('strobo-btn');
+                if (stroboBtn) {
+                    stroboBtn.addEventListener('click', () => {
+                        if (window.simulator) {
+                            const rendering = window.simulator.getRendering();
+                            if (!rendering.isStrobeActive()) {
+                                rendering.triggerStrobe();
+                                stroboBtn.classList.add('active');
+                                // Remove active class after 5 seconds
+                                setTimeout(() => {
+                                    stroboBtn.classList.remove('active');
+                                }, 5000);
+                            }
+                        }
+                    });
+                    stroboBtn.addEventListener('mousedown', (e) => e.preventDefault()); // Prevent text selection
                 }
             }, 500);
         });

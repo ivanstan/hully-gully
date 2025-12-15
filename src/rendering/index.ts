@@ -113,6 +113,19 @@ export class RenderingEngine {
     0x00ffff,  // Aqua
   ];
   
+  // Strobe reflector on loudspeaker pole - EXTREMELY INTENSE
+  private stroboReflector: {
+    mesh: THREE.Mesh;
+    light: THREE.SpotLight;
+    lens: THREE.Mesh;
+    beam: THREE.Mesh;
+  } | null = null;
+  private stroboActive: boolean = false;
+  private stroboEndTime: number = 0;
+  private stroboFlashInterval: number = 50; // milliseconds between flashes
+  private stroboLastFlash: number = 0;
+  private stroboFlashState: boolean = false;
+  
   // Legacy compatibility
   private platformMesh: THREE.Mesh | null = null;
   
@@ -2431,6 +2444,11 @@ export class RenderingEngine {
           color: reflectorColor
         });
       }
+      
+      // Add strobe reflector on the front-right pole only (first pole)
+      if (speakerAngles.indexOf(angle) === 0) {
+        this.createStroboReflectorOnPole(speakerGroup, x, z, deckHeight, poleHeight, angle);
+      }
     }
     
     this.surroundingGroup!.add(speakerGroup);
@@ -2571,6 +2589,118 @@ export class RenderingEngine {
       
       this.surroundingGroup!.add(platformGroup);
     }
+  }
+  
+  /**
+   * Create strobe reflector on the loudspeaker pole
+   * Positioned above the other reflectors, pointing at the ballerina
+   * EXTREMELY INTENSE when active - dominates the scene
+   */
+  private createStroboReflectorOnPole(
+    parentGroup: THREE.Group,
+    poleX: number,
+    poleZ: number,
+    deckHeight: number,
+    poleHeight: number,
+    poleAngle: number
+  ): void {
+    // Position strobe above the other reflectors on the pole
+    const strobeY = deckHeight + poleHeight * 0.85;  // Higher than the colored reflectors
+    
+    // Offset slightly from pole center toward the ride
+    const strobeX = poleX - Math.cos(poleAngle) * 0.25;
+    const strobeZ = poleZ - Math.sin(poleAngle) * 0.25;
+    
+    // Reflector housing (larger, more prominent)
+    const housingRadius = 0.2;
+    const housingHeight = 0.15;
+    const housingGeom = new THREE.CylinderGeometry(housingRadius, housingRadius * 1.2, housingHeight, 16);
+    const housingMat = new THREE.MeshStandardMaterial({
+      color: 0x222222,
+      metalness: 0.9,
+      roughness: 0.2,
+    });
+    const housing = new THREE.Mesh(housingGeom, housingMat);
+    housing.position.set(strobeX, strobeY, strobeZ);
+    
+    // Rotate housing to face the ballerina (center)
+    housing.lookAt(0, strobeY, 0);
+    housing.rotateX(Math.PI / 2);
+    housing.castShadow = true;
+    parentGroup.add(housing);
+    
+    // Large reflector lens - this will flash brilliantly
+    const lensRadius = 0.18;
+    const lensGeom = new THREE.CircleGeometry(lensRadius, 24);
+    const lensMat = new THREE.MeshStandardMaterial({
+      color: 0xffffff,
+      emissive: 0xffffff,
+      emissiveIntensity: 0,  // Off by default
+      side: THREE.DoubleSide,
+    });
+    const lens = new THREE.Mesh(lensGeom, lensMat);
+    
+    // Position lens on the face of the housing, pointing at ballerina
+    const lensOffsetX = -Math.cos(poleAngle) * 0.08;
+    const lensOffsetZ = -Math.sin(poleAngle) * 0.08;
+    lens.position.set(strobeX + lensOffsetX, strobeY, strobeZ + lensOffsetZ);
+    lens.lookAt(0, 3, 0);  // Point at ballerina height
+    parentGroup.add(lens);
+    
+    // Mounting bracket to pole
+    const bracketGeom = new THREE.BoxGeometry(0.08, 0.08, 0.3);
+    const bracket = new THREE.Mesh(bracketGeom, this.materials.stairMetal);
+    bracket.position.set(
+      (poleX + strobeX) / 2,
+      strobeY,
+      (poleZ + strobeZ) / 2
+    );
+    bracket.lookAt(poleX, strobeY, poleZ);
+    parentGroup.add(bracket);
+    
+    // Create massive visible light beam when active
+    const beamLength = 25;  // Long beam to reach ballerina
+    const beamGeom = new THREE.CylinderGeometry(4, 0.15, beamLength, 16, 1, true);
+    const beamMat = new THREE.MeshBasicMaterial({
+      color: 0xffffff,
+      transparent: true,
+      opacity: 0,  // Off by default
+      side: THREE.DoubleSide,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    });
+    const beam = new THREE.Mesh(beamGeom, beamMat);
+    beam.position.set(strobeX, strobeY, strobeZ);
+    beam.lookAt(0, 3, 0);
+    beam.rotateX(Math.PI / 2);
+    beam.translateY(beamLength / 2);
+    beam.visible = false;
+    parentGroup.add(beam);
+    
+    // EXTREMELY powerful spotlight - will dominate the scene
+    const strobeLight = new THREE.SpotLight(
+      0xffffff,     // Pure white
+      0,            // Off by default
+      50,           // Long range
+      Math.PI / 6,  // Focused cone
+      0.3,          // Soft edge
+      0.5           // Slow falloff
+    );
+    strobeLight.position.set(strobeX, strobeY, strobeZ);
+    strobeLight.target.position.set(0, 3, 0);  // Target ballerina
+    strobeLight.castShadow = true;
+    strobeLight.shadow.mapSize.width = 1024;
+    strobeLight.shadow.mapSize.height = 1024;
+    parentGroup.add(strobeLight);
+    parentGroup.add(strobeLight.target);
+    
+    // Store reference for animation (including beam)
+    this.stroboReflector = {
+      mesh: housing,
+      light: strobeLight,
+      lens: lens,
+      beam: beam,
+    };
   }
   
   /**
@@ -3203,10 +3333,65 @@ export class RenderingEngine {
       }
     }
     
+    // Update strobe reflector animation
+    this.updateStroboReflector(state.time);
+    
     // Update camera position when in cabin mode (passenger view)
     if (this.cameraMode === 'cabin' && state.cabins.length > 0) {
       this.updateCabinCamera(state);
     }
+  }
+  
+  /**
+   * Update strobe reflector animation
+   * Creates EXTREMELY INTENSE rapid flashing effect when strobe is active
+   * Dominates the entire scene - blindingly bright
+   */
+  private updateStroboReflector(time: number): void {
+    if (!this.stroboReflector) return;
+    
+    const lensMaterial = this.stroboReflector.lens.material as THREE.MeshStandardMaterial;
+    const beamMaterial = this.stroboReflector.beam.material as THREE.MeshBasicMaterial;
+    
+    // Check if strobe should still be active
+    const now = performance.now();
+    if (this.stroboActive && now >= this.stroboEndTime) {
+      this.stroboActive = false;
+      console.log('[Strobe] Deactivated after 5 seconds');
+    }
+    
+    if (this.stroboActive) {
+      // Rapid flashing effect using time-based toggle
+      if (now - this.stroboLastFlash >= this.stroboFlashInterval) {
+        this.stroboFlashState = !this.stroboFlashState;
+        this.stroboLastFlash = now;
+      }
+      
+      if (this.stroboFlashState) {
+        // Flash ON - BLINDINGLY BRIGHT - dominates the scene
+        lensMaterial.emissiveIntensity = 50;  // Extremely bright lens
+        lensMaterial.color.setHex(0xffffff);
+        
+        // Massive spotlight intensity - lights up entire ballerina
+        this.stroboReflector.light.intensity = 800;
+        this.stroboReflector.light.visible = true;
+      } else {
+        // Flash OFF - completely dark for maximum contrast
+        lensMaterial.emissiveIntensity = 0;
+        lensMaterial.color.setHex(0x444444);
+        this.stroboReflector.light.intensity = 0;
+        this.stroboReflector.light.visible = false;
+      }
+    } else {
+      // Strobe inactive - dim idle state with subtle glow
+      lensMaterial.emissiveIntensity = 0.2;
+      lensMaterial.color.setHex(0xaaaaaa);
+      this.stroboReflector.light.intensity = 0;
+      this.stroboReflector.light.visible = false;
+    }
+    
+    // Keep beam permanently hidden
+    this.stroboReflector.beam.visible = false;
   }
   
   /**
@@ -3450,6 +3635,30 @@ export class RenderingEngine {
    */
   getLightShowEnabled(): boolean {
     return this.lightShowEnabled;
+  }
+  
+  /**
+   * Trigger strobe effect for 5 seconds
+   * Creates rapid flashing white light effect on the strobe reflector
+   */
+  triggerStrobe(): void {
+    if (this.stroboActive) {
+      console.log('[Strobe] Already active, ignoring trigger');
+      return;
+    }
+    
+    console.log('[Strobe] Activated for 5 seconds');
+    this.stroboActive = true;
+    this.stroboEndTime = performance.now() + 5000;  // 5 seconds
+    this.stroboLastFlash = performance.now();
+    this.stroboFlashState = false;
+  }
+  
+  /**
+   * Check if strobe is currently active
+   */
+  isStrobeActive(): boolean {
+    return this.stroboActive;
   }
   
   /**
