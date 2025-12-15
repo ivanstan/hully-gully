@@ -77,7 +77,6 @@ export class RenderingEngine {
   
   // Legacy compatibility
   private platformMesh: THREE.Mesh | null = null;
-  private eccentricMesh: THREE.Mesh | null = null;
   
   // Radius indicator bar
   private radiusBar: THREE.Mesh | null = null;
@@ -432,7 +431,7 @@ export class RenderingEngine {
   private initializeGeometry(): void {
     this.createPlatform();
     // Mast removed - was too prominent/lighthouse-like
-    this.createPivotMarker();
+    // Pivot marker removed - bar end cap now serves as pivot indicator
     this.createWindmillGroup();
   }
   
@@ -627,26 +626,6 @@ export class RenderingEngine {
     this.scene.add(this.mastGroup);
   }
   
-  /**
-   * Create pivot point marker
-   */
-  private createPivotMarker(): void {
-    const pivotGroup = new THREE.Group();
-    
-    // Pivot base
-    const pivotGeom = new THREE.CylinderGeometry(0.5, 0.7, 0.8, 16);
-    this.eccentricMesh = new THREE.Mesh(pivotGeom, this.materials.pivot);
-    this.eccentricMesh.castShadow = true;
-    pivotGroup.add(this.eccentricMesh);
-    
-    // Pivot axle (vertical)
-    const axleGeom = new THREE.CylinderGeometry(0.2, 0.2, 2, 8);
-    const axle = new THREE.Mesh(axleGeom, this.materials.chrome);
-    axle.position.y = 1;
-    pivotGroup.add(axle);
-    
-    this.scene.add(pivotGroup);
-  }
   
   /**
    * Create the windmill group (skirt + cabins + arms + ballerina doll)
@@ -1386,17 +1365,6 @@ export class RenderingEngine {
     
     // Update radius bar so one end stays at pivot point
     this.updateRadiusBar(state.tilt.pivotRadius, state.platformPhase);
-    
-    // Calculate pivot point in world coordinates
-    const pivotX_physics = state.tilt.pivotRadius;
-    const pivotWorldX = pivotX_physics * Math.cos(state.platformPhase);
-    const pivotWorldY = pivotX_physics * Math.sin(state.platformPhase);
-    
-    // Update pivot marker
-    if (this.eccentricMesh) {
-      this.eccentricMesh.parent!.position.set(pivotWorldX, 0.4, pivotWorldY);
-      this.eccentricMesh.parent!.rotation.y = state.platformPhase;
-    }
     
     // Calculate secondary platform center
     const tiltAngle = state.tilt.tiltAngle;
