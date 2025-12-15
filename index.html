@@ -1147,6 +1147,13 @@
     <div id="visual-options-panel">
         <h3>🎨 Visual Options</h3>
         <div class="option-row">
+            <label for="camera-toggle">🎥 External / 🎢 Cabin</label>
+            <label class="toggle-switch">
+                <input type="checkbox" id="camera-toggle">
+                <span class="toggle-slider"></span>
+            </label>
+        </div>
+        <div class="option-row">
             <label for="daynight-toggle">🌙 Night / ☀️ Day</label>
             <label class="toggle-switch">
                 <input type="checkbox" id="daynight-toggle">
@@ -1222,9 +1229,20 @@
         document.addEventListener('DOMContentLoaded', () => {
             // Wait a bit for simulator to initialize
             setTimeout(() => {
+                const cameraToggle = document.getElementById('camera-toggle');
                 const daynightToggle = document.getElementById('daynight-toggle');
                 const lightsToggle = document.getElementById('lights-toggle');
                 const underskirtLightsToggle = document.getElementById('underskirt-lights-toggle');
+                
+                // Camera toggle: unchecked = external (default), checked = cabin view
+                if (cameraToggle) {
+                    cameraToggle.addEventListener('change', (e) => {
+                        if (window.simulator) {
+                            const mode = e.target.checked ? 'cabin' : 'external';
+                            window.simulator.getRendering().setCameraMode(mode);
+                        }
+                    });
+                }
                 
                 // Day/Night toggle: unchecked = night (default), checked = day
                 if (daynightToggle) {

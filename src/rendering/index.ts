@@ -116,6 +116,11 @@ export class RenderingEngine {
   private sunLight: THREE.DirectionalLight | null = null;
   private hemiLight: THREE.HemisphereLight | null = null;
   
+  // Camera modes: 'external' (fixed observer) or 'cabin' (passenger view from pink seat)
+  private cameraMode: 'external' | 'cabin' = 'external';
+  private externalCameraPosition: THREE.Vector3 = new THREE.Vector3(-35, 12, 8);
+  private externalCameraTarget: THREE.Vector3 = new THREE.Vector3(0, 4, 0);
+  
   // UI elements
   private axisHelperCanvas: HTMLCanvasElement | null = null;
   private axisHelperContainer: HTMLElement | null = null;
@@ -3009,6 +3014,72 @@ export class RenderingEngine {
         }
       }
     }
+    
+    // Update camera position when in cabin mode (passenger view)
+    if (this.cameraMode === 'cabin' && state.cabins.length > 0) {
+      this.updateCabinCamera(state);
+    }
+  }
+  
+  /**
+   * Update camera to follow cabin 0 (pink seat) for passenger view
+   * Camera moves with the seat but orbit controls remain enabled for looking around
+   */
+  private updateCabinCamera(state: SimulationState): void {
+    // Get the first cabin (pink seat) world position from cabin group
+    if (this.cabinGroups.length > 0 && this.cabinGroups[0]) {
+      const cabinGroup = this.cabinGroups[0];
+      
+      // Get world position of the cabin
+      const cabinWorldPos = new THREE.Vector3();
+      cabinGroup.getWorldPosition(cabinWorldPos);
+      
+      // Get the cabin's world quaternion for proper orientation
+      const cabinWorldQuat = new THREE.Quaternion();
+      cabinGroup.getWorldQuaternion(cabinWorldQuat);
+      
+      // Position camera at passenger head height (above seat cushion)
+      // The seat is a cushion, passenger sits on it, head is ~1m above seat surface
+      const headOffset = new THREE.Vector3(0, 1.0, 0);
+      const cameraPos = cabinWorldPos.clone().add(headOffset);
+      
+      // Calculate forward direction of travel (tangent to circular motion)
+      // For the windmill rotation, forward is perpendicular to the radial direction
+      const centerPos = new THREE.Vector3();
+      if (this.windmillGroup) {
+        this.windmillGroup.getWorldPosition(centerPos);
+      }
+      
+      // Radial direction (from center to cabin)
+      const radialDir = cabinWorldPos.clone().sub(centerPos);
+      radialDir.y = 0; // Keep horizontal
+      radialDir.normalize();
+      
+      // Forward direction is perpendicular to radial (tangent to circle)
+      // Cross product with up vector gives tangent direction
+      // For CCW rotation: tangent = up × radial
+      const upDir = new THREE.Vector3(0, 1, 0);
+      const forwardDir = new THREE.Vector3().crossVectors(upDir, radialDir).normalize();
+      
+      // If windmill direction is reversed, negate forward direction
+      if (state.windmill.angularVelocity < 0) {
+        forwardDir.negate();
+      }
+      
+      // Create look target in the forward direction of travel
+      const lookTarget = cameraPos.clone().add(forwardDir.multiplyScalar(10));
+      
+      // Smoothly update camera position to follow the seat
+      this.camera.position.lerp(cameraPos, 0.2);
+      
+      // Update orbit controls target to follow the cabin
+      // This allows the user to look around while riding
+      this.controls.target.lerp(cameraPos.clone().add(forwardDir.multiplyScalar(2)), 0.2);
+      
+      // Keep orbit controls enabled so user can look around (turn head)
+      this.controls.enabled = true;
+      this.controls.update();
+    }
   }
   
   /**
@@ -3151,6 +3222,40 @@ export class RenderingEngine {
    */
   getUnderskirtLightsEnabled(): boolean {
     return this.underskirtLightsEnabled;
+  }
+  
+  /**
+   * Set camera mode: 'external' for observer view, 'cabin' for passenger view
+   */
+  setCameraMode(mode: 'external' | 'cabin'): void {
+    const previousMode = this.cameraMode;
+    this.cameraMode = mode;
+    
+    if (mode === 'external' && previousMode === 'cabin') {
+      // Restore external camera position
+      this.camera.position.copy(this.externalCameraPosition);
+      this.controls.target.copy(this.externalCameraTarget);
+      this.controls.enabled = true;
+      this.controls.update();
+    } else if (mode === 'cabin') {
+      // Store current external camera position before switching
+      this.externalCameraPosition.copy(this.camera.position);
+      this.externalCameraTarget.copy(this.controls.target);
+    }
+  }
+  
+  /**
+   * Get current camera mode
+   */
+  getCameraMode(): 'external' | 'cabin' {
+    return this.cameraMode;
+  }
+  
+  /**
+   * Toggle camera mode between external and cabin view
+   */
+  toggleCameraMode(): void {
+    this.setCameraMode(this.cameraMode === 'external' ? 'cabin' : 'external');
   }
   
   /**
