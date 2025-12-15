@@ -1885,32 +1885,7 @@ export class RenderingEngine {
       spire.position.set(x, deckHeight + panelHeight + 1.0, z);
       panelGroup.add(spire);
       
-      // Frame edges
-      const frameThickness = 0.18;
-      const frameMaterial = this.materials.flashPanelGold;
-      
-      // Left frame
-      const leftFrameGeom = new THREE.BoxGeometry(frameThickness, panelHeight, panelDepth + 0.05);
-      const leftFrame = new THREE.Mesh(leftFrameGeom, frameMaterial);
-      leftFrame.position.set(
-        x - Math.cos(-angle + Math.PI / 2) * (panelWidth / 2 - frameThickness / 2),
-        deckHeight + panelHeight / 2,
-        z - Math.sin(-angle + Math.PI / 2) * (panelWidth / 2 - frameThickness / 2)
-      );
-      leftFrame.rotation.y = -angle + Math.PI / 2;
-      panelGroup.add(leftFrame);
-      
-      // Right frame
-      const rightFrame = new THREE.Mesh(leftFrameGeom, frameMaterial);
-      rightFrame.position.set(
-        x + Math.cos(-angle + Math.PI / 2) * (panelWidth / 2 - frameThickness / 2),
-        deckHeight + panelHeight / 2,
-        z + Math.sin(-angle + Math.PI / 2) * (panelWidth / 2 - frameThickness / 2)
-      );
-      rightFrame.rotation.y = -angle + Math.PI / 2;
-      panelGroup.add(rightFrame);
-      
-      // No lights on panels - removed
+      // Side frames removed - panels touch each other in the arc, frames looked misaligned
     }
     
     // Center arch/banner at the top (no lights)
