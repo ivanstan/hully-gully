@@ -18,6 +18,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
@@ -86,6 +87,7 @@ export class RenderingEngine {
   private underskirtLightsEnabled: boolean = true;
   private balerinaDollGroup: THREE.Group | null = null;  // Container for ballerina doll (loaded or fallback)
   private gltfLoader: GLTFLoader;
+  private objLoader: OBJLoader;
   
   // Surrounding structure elements
   private surroundingGroup: THREE.Group | null = null;
@@ -134,8 +136,9 @@ export class RenderingEngine {
     this.platformRadius = platformRadius;
     this.windmillRadius = windmillRadius;
     
-    // Initialize GLTF loader for 3D models
+    // Initialize 3D model loaders
     this.gltfLoader = new GLTFLoader();
+    this.objLoader = new OBJLoader();
     
     // Scene setup
     this.scene = new THREE.Scene();
@@ -1284,115 +1287,146 @@ export class RenderingEngine {
   }
   
   /**
-   * Load ballerina doll 3D model from GLTF file
+   * Load ballerina doll 3D model from OBJ file with PBR textures
    * Falls back to geometric primitives if model not found
    */
   private loadBalerinaDollModel(doll: THREE.Group, innerHeight: number, innerRadius: number): void {
-    // Load the Sketchfab model (scene.gltf + scene.bin + textures)
-    const modelPath = '/models/scene.gltf';
+    // Load the ballerina OBJ model from public/models/ballerina/
+    const modelPath = '/models/ballerina/base.obj';
+    const textureBasePath = '/models/ballerina/';
     
-    this.gltfLoader.load(
-      modelPath,
-      (gltf) => {
-        try {
-          console.log('Ballerina model loaded successfully');
-          const model = gltf.scene;
-          
-          // Scale and position the model
-          // Adjust these values based on the actual model dimensions
-          // The model's Y-axis becomes Z in the windmill's local coords
-          // Model's Y range in GLTF: -1.74 (feet) to 0.22 (head top)
-          // After scaling, the model is about 1.96 * 3.5 = 6.86 units tall
-          // The waist is roughly at Y = -0.5 in model coords (scaled: -0.5 * 3.5 = -1.75)
-          // Position so the waist aligns with skirt inner height (2.5)
-          // After rotation, model's Y becomes Z, so position.z sets vertical placement
-          model.scale.set(3.5, 3.5, 3.5);  // Scaled up for better proportion with skirt
-          const modelWaistY = -0.5;  // Waist position in original model Y coords
-          const scaledWaistOffset = modelWaistY * 3.5;  // = -1.75
-          // Position so that waist (at scaledWaistOffset below model origin) is at skirt level
-          model.position.z = innerHeight - scaledWaistOffset;  // 2.5 - (-1.75) = 4.25
-          model.position.y = 0;
-          
-          // Rotate to stand upright
-          // GLTF models are Y-up, windmill group is Z-up
-          // Rotate +90 degrees around X to make the model's Y-up become Z-up
-          model.rotation.x = Math.PI / 2;  // Stand up (head points to +Z)
-          model.rotation.y = 0;
-          model.rotation.z = 0;
-          
-          // Enable clipping on the renderer to hide legs below skirt
-          this.renderer.localClippingEnabled = true;
-          
-          // Create a clipping plane in world coordinates to hide the legs
-          // The windmill group's Z is up, and the skirt inner edge is at Z = innerHeight = 2.5
-          // We want to clip anything below this level
-          // The plane normal (0, 0, 1) points up, and we clip where Z < innerHeight
-          const skirtTopZ = innerHeight;  // 2.5 in windmill local Z
-          const clipPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), -skirtTopZ);
-          
-          // Apply fallback materials if textures failed to load
-          // and enable shadows on all meshes
-          model.traverse((child) => {
-            if (child instanceof THREE.Mesh) {
-              const meshName = child.name.toLowerCase();
+    // Load textures
+    const textureLoader = new THREE.TextureLoader();
+    
+    // Load diffuse texture
+    textureLoader.load(
+      textureBasePath + 'texture_diffuse.png',
+      (diffuseMap) => {
+        diffuseMap.colorSpace = THREE.SRGBColorSpace;
+        diffuseMap.flipY = true;  // OBJ typically needs flipY for textures
+        
+        // Create material with loaded texture
+        const balerinaMaterial = new THREE.MeshStandardMaterial({
+          map: diffuseMap,
+          side: THREE.DoubleSide,
+          metalness: 0.0,
+          roughness: 0.5,
+          emissive: new THREE.Color(0x222222),  // Slight glow for visibility
+          emissiveIntensity: 0.3,
+        });
+        
+        console.log('Ballerina texture loaded successfully');
+        
+        // Load the OBJ model
+        this.objLoader.load(
+          modelPath,
+          (obj) => {
+            try {
+              console.log('Ballerina OBJ model loaded successfully');
               
-              child.castShadow = true;
-              child.receiveShadow = true;
+              // Get bounding box before any transforms
+              const box = new THREE.Box3().setFromObject(obj);
+              const size = new THREE.Vector3();
+              box.getSize(size);
+              const center = new THREE.Vector3();
+              box.getCenter(center);
+              console.log('Ballerina model size:', size.x.toFixed(2), size.y.toFixed(2), size.z.toFixed(2));
+              console.log('Ballerina model center:', center.x.toFixed(2), center.y.toFixed(2), center.z.toFixed(2));
               
-              // Apply clipping plane to material to hide legs below skirt
-              if (child.material) {
-                // Clone material to avoid affecting other meshes
-                if (Array.isArray(child.material)) {
-                  child.material = child.material.map(m => {
-                    const cloned = m.clone();
-                    cloned.clippingPlanes = [clipPlane];
-                    cloned.clipShadows = true;
-                    return cloned;
-                  });
-                } else {
-                  const clonedMat = child.material.clone();
-                  clonedMat.clippingPlanes = [clipPlane];
-                  clonedMat.clipShadows = true;
-                  child.material = clonedMat;
+              // Apply material to all meshes
+              obj.traverse((child) => {
+                if (child instanceof THREE.Mesh) {
+                  // Use the loaded texture material
+                  child.material = balerinaMaterial;
+                  child.castShadow = true;
+                  child.receiveShadow = true;
                 }
-                
-                const mat = child.material as THREE.MeshStandardMaterial;
-                // If material has no valid map or looks broken, apply a nice skin/dress material
-                if (mat.map === null || mat.map === undefined) {
-                  // Determine material type based on mesh name or position
-                  if (meshName.includes('hair') || meshName.includes('head')) {
-                    child.material = this.materials.dollHair.clone();
-                    child.material.clippingPlanes = [clipPlane];
-                  } else if (meshName.includes('dress') || meshName.includes('cloth') || meshName.includes('body')) {
-                    child.material = this.materials.dollDress.clone();
-                    child.material.clippingPlanes = [clipPlane];
-                  } else {
-                    // Default to skin material
-                    child.material = this.materials.dollSkin.clone();
-                    child.material.clippingPlanes = [clipPlane];
-                  }
-                }
-              }
+              });
+              
+              console.log('Ballerina model mesh count:', obj.children.length);
+              
+              // The OBJ model is Y-up (standard Blender OBJ export)
+              // Model height is on Y axis (1.38 units)
+              // Target height: about 3.5 units to match the ride scale
+              const targetHeight = 3.5;
+              const modelHeight = size.y; // Y is up in the model
+              const scale = targetHeight / modelHeight;
+              obj.scale.set(scale, scale, scale);
+              
+              // Rotate to convert Y-up to Z-up (windmill local coords)
+              // Rotate 90 degrees around X axis
+              obj.rotation.x = Math.PI / 2;
+              obj.rotation.y = 0;
+              obj.rotation.z = 0;
+              
+              // After rotation: model's Y becomes Z, model's Z becomes -Y
+              // Position so model's feet (bottom) are at innerHeight
+              // Model center Y (0.69) becomes Z after rotation
+              // Model bottom was at Y = center.y - size.y/2 = 0.69 - 0.69 = 0
+              // After scale and rotation, model bottom is at Z = 0
+              // We want feet at innerHeight (2.5)
+              obj.position.set(
+                0,  // Center X
+                0,  // Center Y (was Z in model, now Y after rotation)
+                innerHeight  // Bottom of model at skirt height
+              );
+              
+              doll.add(obj);
+              
+              // Force update world matrix and log world position
+              obj.updateWorldMatrix(true, true);
+              const worldPos = new THREE.Vector3();
+              obj.getWorldPosition(worldPos);
+              console.log('Ballerina model added to scene at Z:', obj.position.z.toFixed(2));
+              console.log('Ballerina world position:', worldPos.x.toFixed(2), worldPos.y.toFixed(2), worldPos.z.toFixed(2));
+              console.log('Ballerina scale:', obj.scale.x.toFixed(2), obj.scale.y.toFixed(2), obj.scale.z.toFixed(2));
+              console.log('Ballerina rotation (rad):', obj.rotation.x.toFixed(2), obj.rotation.y.toFixed(2), obj.rotation.z.toFixed(2));
+            } catch (e) {
+              console.warn('Error processing ballerina OBJ model, using fallback:', e);
+              this.createFallbackBalerinaDoll(doll, innerHeight, innerRadius);
             }
-          });
-          
-          // Hide the doll model for now (legs clipping issue)
-          model.visible = false;
-          doll.add(model);
-        } catch (e) {
-          console.warn('Error processing ballerina model, using fallback:', e);
-          this.createFallbackBalerinaDoll(doll, innerHeight, innerRadius);
-        }
+          },
+          (progress) => {
+            if (progress.total > 0) {
+              console.log(`Loading ballerina model: ${(progress.loaded / progress.total * 100).toFixed(1)}%`);
+            }
+          },
+          (error) => {
+            console.warn('Ballerina OBJ model not found, using fallback geometric doll:', error);
+            this.createFallbackBalerinaDoll(doll, innerHeight, innerRadius);
+          }
+        );
       },
-      (progress) => {
-        // Loading progress
-        if (progress.total > 0) {
-          console.log(`Loading ballerina model: ${(progress.loaded / progress.total * 100).toFixed(1)}%`);
-        }
-      },
+      undefined,
       (error) => {
-        console.warn('Ballerina model not found, using fallback geometric doll:', error);
-        this.createFallbackBalerinaDoll(doll, innerHeight, innerRadius);
+        console.warn('Failed to load ballerina texture, using fallback material:', error);
+        // Load model with fallback material
+        this.objLoader.load(
+          modelPath,
+          (obj) => {
+            obj.traverse((child) => {
+              if (child instanceof THREE.Mesh) {
+                child.material = this.materials.dollDress;
+                child.castShadow = true;
+                child.receiveShadow = true;
+              }
+            });
+            
+            // Scale and position
+            const box = new THREE.Box3().setFromObject(obj);
+            const size = new THREE.Vector3();
+            box.getSize(size);
+            const targetHeight = 3.5;
+            const scale = targetHeight / size.z;
+            obj.scale.set(scale, scale, scale);
+            obj.position.set(0, 0, innerHeight + targetHeight / 2);
+            
+            doll.add(obj);
+            console.log('Ballerina model added with fallback material');
+          },
+          undefined,
+          () => this.createFallbackBalerinaDoll(doll, innerHeight, innerRadius)
+        );
       }
     );
   }
@@ -1750,6 +1784,9 @@ export class RenderingEngine {
     
     // Create loudspeaker poles
     this.createLoudspeakers();
+    
+    // Create loudspeaker platforms on either side of the stairs
+    this.createLoudspeakerPlatforms();
     
     this.scene.add(this.surroundingGroup);
   }
@@ -2261,6 +2298,272 @@ export class RenderingEngine {
     }
     
     this.surroundingGroup!.add(speakerGroup);
+  }
+  
+  /**
+   * Create loudspeaker platforms on either side of the stairs
+   * Each platform holds a 3D loudspeaker model loaded from GLTF
+   */
+  private createLoudspeakerPlatforms(): void {
+    const deckRadius = this.platformRadius + this.windmillRadius + 1;
+    const deckHeight = this.DECK_HEIGHT;
+    const stairAngle = Math.PI;  // Stairs at the back
+    
+    // Platform dimensions
+    const platformWidth = 2.0;
+    const platformDepth = 2.0;
+    const platformHeight = 0.2;
+    const platformBaseHeight = 0.8;  // Height of the platform base from ground
+    
+    // Offset from stairs center (left and right)
+    const stairOffset = 2.8;  // Distance from stair center to platform center
+    const distanceFromDeck = 1.8;  // Distance outward from deck edge
+    
+    // Calculate positions for left and right platforms
+    const platformPositions = [
+      { side: 'left', offsetAngle: Math.PI / 2 },   // Left of stairs
+      { side: 'right', offsetAngle: -Math.PI / 2 }, // Right of stairs
+    ];
+    
+    for (const { side, offsetAngle } of platformPositions) {
+      const platformGroup = new THREE.Group();
+      
+      // Calculate platform position (next to stairs, at ground level)
+      const stairDirX = Math.cos(stairAngle);
+      const stairDirZ = Math.sin(stairAngle);
+      const sideOffsetX = Math.cos(stairAngle + offsetAngle) * stairOffset;
+      const sideOffsetZ = Math.sin(stairAngle + offsetAngle) * stairOffset;
+      
+      // Position platform at ground level, beside the stairs
+      const baseX = stairDirX * (deckRadius + distanceFromDeck) + sideOffsetX;
+      const baseZ = stairDirZ * (deckRadius + distanceFromDeck) + sideOffsetZ;
+      
+      // Platform rotation (90 degrees around Y-axis)
+      const platformRotation = Math.PI / 2;
+      
+      // Platform base (raised pedestal)
+      const baseGeom = new THREE.BoxGeometry(platformWidth + 0.3, platformBaseHeight, platformDepth + 0.3);
+      const base = new THREE.Mesh(baseGeom, this.materials.stairMetal);
+      base.position.set(baseX, platformBaseHeight / 2, baseZ);
+      base.rotation.y = platformRotation;
+      base.castShadow = true;
+      base.receiveShadow = true;
+      platformGroup.add(base);
+      
+      // Platform top surface
+      const topGeom = new THREE.BoxGeometry(platformWidth, platformHeight, platformDepth);
+      const top = new THREE.Mesh(topGeom, this.materials.deckMetal);
+      top.position.set(baseX, platformBaseHeight + platformHeight / 2, baseZ);
+      top.rotation.y = platformRotation;
+      top.castShadow = true;
+      top.receiveShadow = true;
+      platformGroup.add(top);
+      
+      // Decorative edge trim
+      const trimGeom = new THREE.BoxGeometry(platformWidth + 0.1, 0.05, platformDepth + 0.1);
+      const trim = new THREE.Mesh(trimGeom, this.materials.chrome);
+      trim.position.set(baseX, platformBaseHeight + platformHeight + 0.025, baseZ);
+      trim.rotation.y = platformRotation;
+      platformGroup.add(trim);
+      
+      // Corner posts (rotated 90 degrees with platform)
+      const postHeight = 1.2;
+      const postRadius = 0.06;
+      // After 90 degree rotation: dx becomes dz, dz becomes -dx
+      const corners = [
+        { dx: platformDepth / 2 - 0.1, dz: -(platformWidth / 2 - 0.1) },
+        { dx: -(platformDepth / 2 - 0.1), dz: -(platformWidth / 2 - 0.1) },
+        { dx: platformDepth / 2 - 0.1, dz: (platformWidth / 2 - 0.1) },
+        { dx: -(platformDepth / 2 - 0.1), dz: (platformWidth / 2 - 0.1) },
+      ];
+      
+      for (const corner of corners) {
+        const postGeom = new THREE.CylinderGeometry(postRadius, postRadius, postHeight, 8);
+        const post = new THREE.Mesh(postGeom, this.materials.chrome);
+        post.position.set(
+          baseX + corner.dx,
+          platformBaseHeight + platformHeight + postHeight / 2,
+          baseZ + corner.dz
+        );
+        post.castShadow = true;
+        platformGroup.add(post);
+        
+        // Post cap
+        const capGeom = new THREE.SphereGeometry(postRadius * 1.3, 8, 8);
+        const cap = new THREE.Mesh(capGeom, this.materials.chrome);
+        cap.position.set(
+          baseX + corner.dx,
+          platformBaseHeight + platformHeight + postHeight,
+          baseZ + corner.dz
+        );
+        platformGroup.add(cap);
+      }
+      
+      // Load two loudspeaker GLTF models per platform
+      // Raise speakers above platform surface to prevent clipping
+      const speakerY = platformBaseHeight + platformHeight + 0.5;
+      
+      // Calculate angle facing away from the ballerina (center of ride)
+      // The ballerina is at the center (0, 0), so we face outward from center
+      const faceAwayAngle = Math.atan2(baseZ, baseX);
+      
+      // Spacing between the two loudspeakers (side by side)
+      const speakerSpacing = 0.7;  // Distance between speaker centers
+      
+      // Calculate offset for side-by-side placement aligned with rotated platform
+      // Platform is rotated 90 degrees, so speakers are placed along the face-away direction
+      const offsetX = Math.cos(faceAwayAngle) * speakerSpacing / 2;
+      const offsetZ = Math.sin(faceAwayAngle) * speakerSpacing / 2;
+      
+      // Left speaker
+      this.loadLoudspeakerModel(
+        platformGroup, 
+        baseX - offsetX, 
+        speakerY, 
+        baseZ - offsetZ, 
+        faceAwayAngle
+      );
+      
+      // Right speaker
+      this.loadLoudspeakerModel(
+        platformGroup, 
+        baseX + offsetX, 
+        speakerY, 
+        baseZ + offsetZ, 
+        faceAwayAngle
+      );
+      
+      this.surroundingGroup!.add(platformGroup);
+    }
+  }
+  
+  /**
+   * Load loudspeaker 3D model from GLTF file
+   * Falls back to a simple geometric speaker if model not found
+   */
+  private loadLoudspeakerModel(
+    parentGroup: THREE.Group,
+    x: number,
+    y: number,
+    z: number,
+    faceAngle: number
+  ): void {
+    const modelPath = '/models/loudspeaker/scene.gltf';
+    
+    this.gltfLoader.load(
+      modelPath,
+      (gltf) => {
+        try {
+          console.log('Loudspeaker model loaded successfully');
+          const model = gltf.scene;
+          
+          // Scale and position the model
+          // The Sketchfab loudspeaker model is quite small, so scale it up
+          // to be prominent on the platforms (about 1.5m tall)
+          model.scale.set(2.5, 2.5, 2.5);
+          model.position.set(x, y, z);
+          
+          // Face the model away from the ballerina (outward from ride center)
+          // faceAngle is already calculated to point away from center
+          model.rotation.y = faceAngle;
+          
+          // Enable shadows on all meshes
+          model.traverse((child) => {
+            if (child instanceof THREE.Mesh) {
+              child.castShadow = true;
+              child.receiveShadow = true;
+            }
+          });
+          
+          parentGroup.add(model);
+        } catch (e) {
+          console.warn('Error processing loudspeaker model, using fallback:', e);
+          this.createFallbackLoudspeaker(parentGroup, x, y, z, faceAngle);
+        }
+      },
+      undefined,
+      (error) => {
+        console.warn('Could not load loudspeaker model, using fallback geometry:', error);
+        this.createFallbackLoudspeaker(parentGroup, x, y, z, faceAngle);
+      }
+    );
+  }
+  
+  /**
+   * Create a fallback loudspeaker using simple geometry
+   * Used when GLTF model fails to load
+   */
+  private createFallbackLoudspeaker(
+    parentGroup: THREE.Group,
+    x: number,
+    y: number,
+    z: number,
+    faceAngle: number
+  ): void {
+    const speakerGroup = new THREE.Group();
+    
+    // Speaker cabinet (main box)
+    const cabinetWidth = 0.6;
+    const cabinetHeight = 1.0;
+    const cabinetDepth = 0.5;
+    
+    const cabinetGeom = new THREE.BoxGeometry(cabinetWidth, cabinetHeight, cabinetDepth);
+    const cabinetMat = new THREE.MeshStandardMaterial({
+      color: 0x1a1a1a,
+      metalness: 0.1,
+      roughness: 0.8,
+    });
+    const cabinet = new THREE.Mesh(cabinetGeom, cabinetMat);
+    cabinet.position.set(0, cabinetHeight / 2, 0);
+    cabinet.castShadow = true;
+    cabinet.receiveShadow = true;
+    speakerGroup.add(cabinet);
+    
+    // Speaker cone (woofer)
+    const wooferRadius = 0.2;
+    const wooferGeom = new THREE.CylinderGeometry(wooferRadius * 0.3, wooferRadius, 0.08, 16);
+    const wooferMat = new THREE.MeshStandardMaterial({
+      color: 0x333333,
+      metalness: 0.2,
+      roughness: 0.6,
+    });
+    const woofer = new THREE.Mesh(wooferGeom, wooferMat);
+    woofer.rotation.x = Math.PI / 2;
+    woofer.position.set(0, cabinetHeight * 0.35, cabinetDepth / 2 + 0.04);
+    speakerGroup.add(woofer);
+    
+    // Tweeter (smaller cone)
+    const tweeterRadius = 0.08;
+    const tweeterGeom = new THREE.CylinderGeometry(tweeterRadius * 0.3, tweeterRadius, 0.04, 12);
+    const tweeter = new THREE.Mesh(tweeterGeom, wooferMat);
+    tweeter.rotation.x = Math.PI / 2;
+    tweeter.position.set(0, cabinetHeight * 0.7, cabinetDepth / 2 + 0.02);
+    speakerGroup.add(tweeter);
+    
+    // Woofer ring (chrome accent)
+    const ringGeom = new THREE.TorusGeometry(wooferRadius, 0.015, 8, 24);
+    const ring = new THREE.Mesh(ringGeom, this.materials.chrome);
+    ring.position.set(0, cabinetHeight * 0.35, cabinetDepth / 2 + 0.01);
+    speakerGroup.add(ring);
+    
+    // Speaker grill (mesh pattern - simplified as a plane)
+    const grillGeom = new THREE.PlaneGeometry(cabinetWidth - 0.1, cabinetHeight - 0.15);
+    const grillMat = new THREE.MeshStandardMaterial({
+      color: 0x222222,
+      metalness: 0.3,
+      roughness: 0.7,
+      transparent: true,
+      opacity: 0.8,
+    });
+    const grill = new THREE.Mesh(grillGeom, grillMat);
+    grill.position.set(0, cabinetHeight / 2, cabinetDepth / 2 + 0.001);
+    speakerGroup.add(grill);
+    
+    // Position and rotate the speaker group
+    speakerGroup.position.set(x, y, z);
+    speakerGroup.rotation.y = faceAngle;
+    
+    parentGroup.add(speakerGroup);
   }
   
   /**

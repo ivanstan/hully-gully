@@ -351,3 +351,4 @@ export function calculateTorque(power: number, speed: number): number {
   return power / speed;
 }
 
+
