@@ -1137,6 +1137,64 @@
         .toggle-switch input:focus + .toggle-slider {
             box-shadow: 0 0 4px #ff69b4;
         }
+        
+        /* Air Horn Button */
+        .air-horn-section {
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px solid rgba(255, 105, 180, 0.3);
+        }
+        
+        .air-horn-btn {
+            width: 100%;
+            padding: 12px 16px;
+            font-size: 16px;
+            font-weight: bold;
+            color: #fff;
+            background: linear-gradient(180deg, #ff4500, #cc3700);
+            border: 3px solid #ff6600;
+            border-radius: 8px;
+            cursor: pointer;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            box-shadow: 
+                0 4px 15px rgba(255, 69, 0, 0.4),
+                inset 0 1px 0 rgba(255, 255, 255, 0.2);
+            transition: all 0.1s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+        
+        .air-horn-btn:hover {
+            background: linear-gradient(180deg, #ff5500, #dd4400);
+            box-shadow: 
+                0 6px 20px rgba(255, 69, 0, 0.6),
+                inset 0 1px 0 rgba(255, 255, 255, 0.3);
+            transform: translateY(-1px);
+        }
+        
+        .air-horn-btn:active {
+            background: linear-gradient(180deg, #cc3700, #aa2800);
+            box-shadow: 
+                0 2px 8px rgba(255, 69, 0, 0.4),
+                inset 0 2px 4px rgba(0, 0, 0, 0.2);
+            transform: translateY(1px);
+        }
+        
+        .air-horn-btn .horn-icon {
+            font-size: 20px;
+        }
+        
+        .air-horn-btn.playing {
+            animation: horn-pulse 0.15s ease infinite;
+        }
+        
+        @keyframes horn-pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.02); }
+        }
     </style>
 </head>
 <body>
@@ -1174,7 +1232,18 @@
                 <span class="toggle-slider"></span>
             </label>
         </div>
+        
+        <!-- Air Horn Section -->
+        <div class="air-horn-section">
+            <button type="button" id="air-horn-btn" class="air-horn-btn">
+                <span class="horn-icon">📯</span>
+                <span>HORN</span>
+            </button>
+        </div>
     </div>
+    
+    <!-- Preload Air Horn Audio -->
+    <audio id="air-horn-audio" preload="auto" src="/audio/air-horn.mp3"></audio>
     
     <div class="info-panel">
         <h3>Balerina Ride Simulator</h3>
@@ -1225,8 +1294,68 @@
     
     <script type="module" src="/src/index.ts"></script>
     <script>
+        // Preload air horn audio on page load
+        let airHornAudio = null;
+        let airHornReady = false;
+        
+        function preloadAirHorn() {
+            airHornAudio = document.getElementById('air-horn-audio');
+            if (airHornAudio) {
+                // Force preload by loading the audio
+                airHornAudio.load();
+                
+                // Mark as ready when loaded
+                airHornAudio.addEventListener('canplaythrough', () => {
+                    airHornReady = true;
+                    console.log('[AirHorn] Audio preloaded and ready');
+                }, { once: true });
+                
+                // Handle load error
+                airHornAudio.addEventListener('error', (e) => {
+                    console.error('[AirHorn] Failed to load audio:', e);
+                });
+            }
+        }
+        
+        function playAirHorn() {
+            if (!airHornAudio) return;
+            
+            const btn = document.getElementById('air-horn-btn');
+            
+            // Reset to start if already playing
+            airHornAudio.currentTime = 0;
+            
+            // Play the sound
+            airHornAudio.play().then(() => {
+                // Add visual feedback
+                if (btn) {
+                    btn.classList.add('playing');
+                    // Remove class when audio ends
+                    airHornAudio.onended = () => {
+                        btn.classList.remove('playing');
+                    };
+                    // Also set a timeout as backup
+                    setTimeout(() => {
+                        btn.classList.remove('playing');
+                    }, 2000);
+                }
+            }).catch(err => {
+                console.warn('[AirHorn] Playback failed (user interaction required):', err);
+            });
+        }
+        
+        // Start preloading immediately
+        preloadAirHorn();
+        
         // Wire up visual options toggles
         document.addEventListener('DOMContentLoaded', () => {
+            // Set up air horn button
+            const airHornBtn = document.getElementById('air-horn-btn');
+            if (airHornBtn) {
+                airHornBtn.addEventListener('click', playAirHorn);
+                airHornBtn.addEventListener('mousedown', (e) => e.preventDefault()); // Prevent text selection
+            }
+            
             // Wait a bit for simulator to initialize
             setTimeout(() => {
                 const cameraToggle = document.getElementById('camera-toggle');
