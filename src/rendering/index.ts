@@ -555,6 +555,66 @@ export class RenderingEngine {
   }
   
   /**
+   * Create a tapered arm geometry (wider at one end, narrower at other)
+   * @param length - Length of the arm (along X axis)
+   * @param bottomWidth - Width at bottom end (at X=0)
+   * @param topWidth - Width at top end (at X=length)
+   * @param bottomHeight - Height at bottom end
+   * @param topHeight - Height at top end
+   */
+  private createTaperedArmGeometry(
+    length: number,
+    bottomWidth: number,
+    topWidth: number,
+    bottomHeight: number,
+    topHeight: number
+  ): THREE.BufferGeometry {
+    // Create a tapered box (8 vertices, 12 triangles)
+    // The arm goes along the X axis, with bottom at X=-length/2 and top at X=+length/2
+    const hw0 = bottomWidth / 2;   // Half-width at bottom
+    const hh0 = bottomHeight / 2;  // Half-height at bottom
+    const hw1 = topWidth / 2;      // Half-width at top
+    const hh1 = topHeight / 2;     // Half-height at top
+    const hl = length / 2;         // Half-length
+    
+    const vertices = new Float32Array([
+      // Bottom end (X = -hl) - wider
+      -hl, -hh0, -hw0,  // 0: bottom-left-back
+      -hl, -hh0,  hw0,  // 1: bottom-left-front
+      -hl,  hh0,  hw0,  // 2: top-left-front
+      -hl,  hh0, -hw0,  // 3: top-left-back
+      // Top end (X = +hl) - narrower
+       hl, -hh1, -hw1,  // 4: bottom-right-back
+       hl, -hh1,  hw1,  // 5: bottom-right-front
+       hl,  hh1,  hw1,  // 6: top-right-front
+       hl,  hh1, -hw1,  // 7: top-right-back
+    ]);
+    
+    // Indices for 12 triangles (6 faces)
+    const indices = [
+      // Left face (bottom end cap)
+      0, 2, 1,  0, 3, 2,
+      // Right face (top end cap)
+      4, 5, 6,  4, 6, 7,
+      // Bottom face
+      0, 1, 5,  0, 5, 4,
+      // Top face
+      2, 3, 7,  2, 7, 6,
+      // Front face
+      1, 2, 6,  1, 6, 5,
+      // Back face
+      0, 4, 7,  0, 7, 3,
+    ];
+    
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
+    geometry.setIndex(indices);
+    geometry.computeVertexNormals();
+    
+    return geometry;
+  }
+  
+  /**
    * Create the fork arm that holds the secondary platform
    * The fork connects from the pivot point to the center of the secondary platform
    */
@@ -568,32 +628,24 @@ export class RenderingEngine {
       roughness: 0.25,
     });
     
-    // Main arm beam - will be dynamically sized based on distance
+    // Main arm beam - tapered shape (wider at bottom/pivot, narrower at top/skirt)
     // Initial geometry - will be updated in updateForkArm
-    const armGeom = new THREE.BoxGeometry(1, 0.3, 0.4);
+    const armGeom = this.createTaperedArmGeometry(1, 1.2, 0.6, 0.5, 0.3);
     const armMesh = new THREE.Mesh(armGeom, forkMaterial);
     armMesh.name = 'forkArmBeam';
     armMesh.castShadow = true;
     armMesh.receiveShadow = true;
     this.forkArmGroup.add(armMesh);
     
-    // Pivot end cap (at pivot point) - cylindrical joint
-    const pivotCapGeom = new THREE.CylinderGeometry(0.35, 0.35, 0.5, 16);
-    const pivotCap = new THREE.Mesh(pivotCapGeom, this.materials.chrome);
-    pivotCap.name = 'pivotCap';
-    pivotCap.rotation.x = Math.PI / 2;  // Align cylinder horizontally
-    pivotCap.castShadow = true;
-    this.forkArmGroup.add(pivotCap);
-    
-    // Secondary platform end cap - circular mounting plate
-    const platCapGeom = new THREE.CylinderGeometry(0.5, 0.4, 0.3, 16);
+    // Secondary platform end cap - circular mounting plate (smaller for narrower top)
+    const platCapGeom = new THREE.CylinderGeometry(0.45, 0.35, 0.3, 16);
     const platCap = new THREE.Mesh(platCapGeom, this.materials.chrome);
     platCap.name = 'platCap';
     platCap.rotation.x = Math.PI / 2;  // Will be oriented toward secondary platform
     platCap.castShadow = true;
     this.forkArmGroup.add(platCap);
     
-    // Add structural reinforcement ribs along the arm
+    // Add structural reinforcement ribs along the arm (tapered sizes)
     const ribMaterial = new THREE.MeshStandardMaterial({
       color: 0x666666,
       metalness: 0.8,
@@ -601,7 +653,11 @@ export class RenderingEngine {
     });
     
     for (let i = 0; i < 3; i++) {
-      const ribGeom = new THREE.BoxGeometry(0.08, 0.5, 0.5);
+      // Ribs get smaller toward the top
+      const t = 0.25 + (i * 0.25);  // 0.25, 0.5, 0.75 along arm
+      const ribWidth = 1.2 - (1.2 - 0.6) * t;  // Interpolate between bottom and top width
+      const ribHeight = 0.5 - (0.5 - 0.3) * t;  // Interpolate height too
+      const ribGeom = new THREE.BoxGeometry(0.08, ribHeight + 0.15, ribWidth + 0.1);
       const rib = new THREE.Mesh(ribGeom, ribMaterial);
       rib.name = `rib${i}`;
       rib.castShadow = true;
@@ -671,7 +727,7 @@ export class RenderingEngine {
     const dirZ = dz / fullLength;
     
     // Inset the fork arm start point away from the pivot edge to avoid clipping
-    const pivotInset = 1.5;  // Distance to move inward from pivot point
+    const pivotInset = 3.0;  // Distance to move inward from pivot point (increased to avoid clipping)
     const forkStartX = pivotWorldX + dirX * pivotInset;
     const forkStartY = pivotWorldY + dirY * pivotInset;
     const forkStartZ = pivotWorldZ + dirZ * pivotInset;
@@ -684,15 +740,21 @@ export class RenderingEngine {
     const midY = (forkStartY + skirtAttachY) / 2;
     const midZ = (forkStartZ + skirtAttachZ) / 2;
     
+    // Tapered arm dimensions
+    const bottomWidth = 1.2;   // Width at pivot (bottom) end
+    const topWidth = 0.6;      // Width at skirt (top) end
+    const bottomHeight = 0.5;  // Height at pivot end
+    const topHeight = 0.3;     // Height at skirt end
+    
     // Get the arm beam mesh and update it
     const armMesh = this.forkArmGroup.getObjectByName('forkArmBeam') as THREE.Mesh;
     if (armMesh) {
-      // Update geometry if length changed
-      const currentGeom = armMesh.geometry as THREE.BoxGeometry;
-      if (Math.abs(currentGeom.parameters.width - armLength) > 0.01) {
-        armMesh.geometry.dispose();
-        armMesh.geometry = new THREE.BoxGeometry(armLength, 0.3, 0.4);
-      }
+      // Always recreate tapered geometry when length changes
+      // (BufferGeometry doesn't have parameters like BoxGeometry)
+      armMesh.geometry.dispose();
+      armMesh.geometry = this.createTaperedArmGeometry(
+        armLength, bottomWidth, topWidth, bottomHeight, topHeight
+      );
       
       // Position at midpoint
       armMesh.position.set(midX, midY, midZ);
@@ -703,17 +765,6 @@ export class RenderingEngine {
       const quaternion = new THREE.Quaternion();
       quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), direction);
       armMesh.quaternion.copy(quaternion);
-    }
-    
-    // Position pivot cap at the inset fork start point (not at pivot edge)
-    const pivotCap = this.forkArmGroup.getObjectByName('pivotCap') as THREE.Mesh;
-    if (pivotCap) {
-      pivotCap.position.set(forkStartX, forkStartY, forkStartZ);
-      // Orient perpendicular to arm direction
-      const perpDir = new THREE.Vector3(-dirZ, 0, dirX).normalize();
-      const capQuat = new THREE.Quaternion();
-      capQuat.setFromUnitVectors(new THREE.Vector3(0, 1, 0), perpDir);
-      pivotCap.quaternion.copy(capQuat);
     }
     
     // Position platform cap at skirt attachment point
