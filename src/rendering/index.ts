@@ -145,10 +145,10 @@ export class RenderingEngine {
     this.scene.background = new THREE.Color(0x0a0a15);
     this.scene.fog = new THREE.Fog(0x0a0a15, 50, 150);
     
-    // Camera setup
+    // Camera setup - facing platform from stairs side (negative X direction)
     this.camera = new THREE.PerspectiveCamera(60, width / height, 0.1, 500);
-    this.camera.position.set(25, 18, 25);
-    this.camera.lookAt(0, 3, 0);
+    this.camera.position.set(-35, 12, 8);
+    this.camera.lookAt(0, 4, 0);
     
     // Renderer setup with enhanced settings
     this.renderer = new THREE.WebGLRenderer({ 
@@ -176,7 +176,7 @@ export class RenderingEngine {
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.enableDamping = true;
     this.controls.dampingFactor = 0.05;
-    this.controls.target.set(0, 3, 0);
+    this.controls.target.set(0, 4, 0);
     this.controls.minDistance = 10;
     this.controls.maxDistance = 100;
     this.controls.maxPolarAngle = Math.PI / 2 + 0.3;
