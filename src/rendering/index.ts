@@ -1834,20 +1834,24 @@ export class RenderingEngine {
   
   /**
    * Create decorative back flash panels typical of fairground rides
-   * Semicircular arrangement with lights and ornate decorations
-   * Panels extend directly from the platform edge with no gap
+   * Semicircular arrangement - fewer wider panels with no gaps
+   * Panels extend directly from the platform edge
    */
   private createBackFlashPanels(): void {
     const panelGroup = new THREE.Group();
     
     const deckRadius = this.platformRadius + this.windmillRadius + 1;
     const baseRadius = deckRadius;  // Panels at the deck edge (no gap)
-    const panelCount = 11;  // More panels to cover the arc tightly
-    const arcSpan = Math.PI * 0.9;  // Wide arc coverage
+    const panelCount = 7;  // Fewer, wider panels
+    const arcSpan = Math.PI * 0.85;  // Arc coverage
     const centerAngle = 0;  // Centered at front of ride
     
-    const panelWidth = 3.2;  // Slightly narrower for tighter fit
-    const panelHeight = 5.5;
+    // Calculate panel width to fill arc without gaps
+    // Arc length = radius * angle, divided by panel count
+    const arcLength = baseRadius * arcSpan;
+    const panelWidth = (arcLength / panelCount) + 0.3;  // Slight overlap to ensure no gaps
+    
+    const panelHeight = 8.25;  // 50% taller (was 5.5)
     const panelDepth = 0.3;
     const deckHeight = this.DECK_HEIGHT;
     
@@ -1876,13 +1880,13 @@ export class RenderingEngine {
       panelGroup.add(crown);
       
       // Decorative spire on top
-      const spireGeom = new THREE.ConeGeometry(0.2, 0.8, 8);
+      const spireGeom = new THREE.ConeGeometry(0.25, 1.0, 8);
       const spire = new THREE.Mesh(spireGeom, this.materials.flashPanelGold);
-      spire.position.set(x, deckHeight + panelHeight + 0.9, z);
+      spire.position.set(x, deckHeight + panelHeight + 1.0, z);
       panelGroup.add(spire);
       
       // Frame edges
-      const frameThickness = 0.15;
+      const frameThickness = 0.18;
       const frameMaterial = this.materials.flashPanelGold;
       
       // Left frame
@@ -1906,11 +1910,10 @@ export class RenderingEngine {
       rightFrame.rotation.y = -angle + Math.PI / 2;
       panelGroup.add(rightFrame);
       
-      // Add light bulbs to the panel - 2 rows
-      this.addFlashPanelLights(panelGroup, x, z, angle, panelWidth, panelHeight, deckHeight);
+      // No lights on panels - removed
     }
     
-    // Center arch/banner at the top
+    // Center arch/banner at the top (no lights)
     const archRadius = baseRadius - 0.3;
     const archHeight = deckHeight + panelHeight + 1.5;
     
@@ -1921,84 +1924,7 @@ export class RenderingEngine {
     banner.rotation.y = Math.PI / 2;
     panelGroup.add(banner);
     
-    // "BALLERINA" text would go here - using decorative spheres for now
-    const textLights = 9;
-    for (let i = 0; i < textLights; i++) {
-      const tx = (i - (textLights - 1) / 2) * 0.6;
-      const lightGeom = new THREE.SphereGeometry(0.12, 8, 8);
-      const lightMat = new THREE.MeshStandardMaterial({
-        color: 0xffffaa,
-        emissive: 0xffaa44,
-        emissiveIntensity: 1.5,
-      });
-      const light = new THREE.Mesh(lightGeom, lightMat);
-      light.position.set(archRadius + 0.15, archHeight, tx);
-      panelGroup.add(light);
-      this.flashPanelLights.push(light);
-    }
-    
     this.surroundingGroup!.add(panelGroup);
-  }
-  
-  /**
-   * Add decorative light bulbs to a flash panel
-   */
-  private addFlashPanelLights(
-    group: THREE.Group,
-    panelX: number, 
-    panelZ: number, 
-    angle: number,
-    panelWidth: number,
-    panelHeight: number,
-    deckHeight: number
-  ): void {
-    const lightsPerRow = 5;
-    const rows = 2;
-    const offsetFromPanel = 0.2;  // How far in front of panel
-    
-    for (let row = 0; row < rows; row++) {
-      const rowY = deckHeight + 0.8 + row * (panelHeight - 1.5);
-      
-      for (let i = 0; i < lightsPerRow; i++) {
-        const t = (i - (lightsPerRow - 1) / 2) / ((lightsPerRow - 1) / 2);  // -1 to 1
-        const localX = t * (panelWidth / 2 - 0.3);
-        
-        // Calculate world position
-        const forward = new THREE.Vector3(
-          Math.cos(angle),
-          0,
-          Math.sin(angle)
-        );
-        const right = new THREE.Vector3(
-          -Math.sin(angle),
-          0,
-          Math.cos(angle)
-        );
-        
-        const worldX = panelX + forward.x * offsetFromPanel + right.x * localX;
-        const worldZ = panelZ + forward.z * offsetFromPanel + right.z * localX;
-        
-        // Light bulb
-        const bulbMat = new THREE.MeshStandardMaterial({
-          color: row === 0 ? 0xffeecc : 0xffffff,
-          emissive: row === 0 ? 0xffaa44 : 0xffffaa,
-          emissiveIntensity: 0.8,
-        });
-        const bulbGeom = new THREE.SphereGeometry(0.1, 8, 8);
-        const bulb = new THREE.Mesh(bulbGeom, bulbMat);
-        bulb.position.set(worldX, rowY, worldZ);
-        group.add(bulb);
-        this.flashPanelLights.push(bulb);
-        
-        // Add a point light for every 3rd bulb
-        if (i % 3 === 1 && row === 0) {
-          const pointLight = new THREE.PointLight(0xffaa44, 0.3, 8, 2);
-          pointLight.position.set(worldX, rowY, worldZ);
-          group.add(pointLight);
-          this.flashPanelPointLights.push(pointLight);
-        }
-      }
-    }
   }
   
   /**
