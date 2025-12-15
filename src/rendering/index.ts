@@ -25,6 +25,7 @@ import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPa
 import { SMAAPass } from 'three/examples/jsm/postprocessing/SMAAPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { SimulationState, CabinState } from '../types/index.js';
+import { SmokeSystem } from './SmokeSystem.js';
 
 /**
  * Material presets for the ride
@@ -125,6 +126,10 @@ export class RenderingEngine {
   private stroboFlashInterval: number = 50; // milliseconds between flashes
   private stroboLastFlash: number = 0;
   private stroboFlashState: boolean = false;
+  
+  // Smoke system
+  private smokeSystem: SmokeSystem | null = null;
+  private lastUpdateTime: number = 0;
   
   // Legacy compatibility
   private platformMesh: THREE.Mesh | null = null;
@@ -230,6 +235,9 @@ export class RenderingEngine {
     
     // Initialize ride geometry
     this.initializeGeometry();
+    
+    // Initialize smoke system - dense dance floor fog effect
+    this.smokeSystem = new SmokeSystem(this.scene);
     
     // Handle resize
     window.addEventListener('resize', () => {
@@ -3340,6 +3348,31 @@ export class RenderingEngine {
     if (this.cameraMode === 'cabin' && state.cabins.length > 0) {
       this.updateCabinCamera(state);
     }
+    
+    // Update smoke system with wind data from simulation
+    if (this.smokeSystem) {
+      // Calculate delta time
+      const currentTime = state.time;
+      const deltaTime = this.lastUpdateTime > 0 ? currentTime - this.lastUpdateTime : 0.016;
+      this.lastUpdateTime = currentTime;
+      
+      // Get windmill center position in world space
+      const windmillCenter = new THREE.Vector3();
+      if (this.windmillGroup) {
+        this.windmillGroup.getWorldPosition(windmillCenter);
+      }
+      
+      // Update smoke system with current wind data
+      this.smokeSystem.updateWindData(
+        state.platform.angularVelocity,
+        state.windmill.angularVelocity,
+        windmillCenter,
+        this.windmillRadius
+      );
+      
+      // Update particle physics
+      this.smokeSystem.update(deltaTime);
+    }
   }
   
   /**
@@ -3662,6 +3695,34 @@ export class RenderingEngine {
   }
   
   /**
+   * Start smoke emission from smoke machines
+   * Call when smoke button is pressed
+   */
+  startSmoke(): void {
+    if (this.smokeSystem) {
+      this.smokeSystem.startEmission();
+    }
+  }
+  
+  /**
+   * Stop smoke emission
+   * Call when smoke button is released
+   * Existing smoke will continue to dissipate naturally
+   */
+  stopSmoke(): void {
+    if (this.smokeSystem) {
+      this.smokeSystem.stopEmission();
+    }
+  }
+  
+  /**
+   * Check if smoke is currently being emitted
+   */
+  isSmokeEmitting(): boolean {
+    return this.smokeSystem?.isCurrentlyEmitting() ?? false;
+  }
+  
+  /**
    * Set camera mode: 'external' for observer view, 'cabin' for passenger view
    */
   setCameraMode(mode: 'external' | 'cabin'): void {
@@ -3748,6 +3809,12 @@ export class RenderingEngine {
   dispose(): void {
     if (this.axisHelperContainer && this.axisHelperContainer.parentElement) {
       this.axisHelperContainer.parentElement.removeChild(this.axisHelperContainer);
+    }
+    
+    // Dispose smoke system
+    if (this.smokeSystem) {
+      this.smokeSystem.dispose();
+      this.smokeSystem = null;
     }
     
     // Dispose materials

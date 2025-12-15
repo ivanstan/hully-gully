@@ -1265,6 +1265,71 @@
                     0 0 20px rgba(255, 255, 255, 0.1);
             }
         }
+        
+        /* Smoke Button */
+        .smoke-btn {
+            width: 100%;
+            padding: 12px 16px;
+            font-size: 16px;
+            font-weight: bold;
+            color: #fff;
+            background: linear-gradient(180deg, #555, #333);
+            border: 3px solid #888;
+            border-radius: 8px;
+            cursor: pointer;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            box-shadow: 
+                0 4px 15px rgba(100, 100, 100, 0.4),
+                inset 0 1px 0 rgba(255, 255, 255, 0.1);
+            transition: all 0.1s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            margin-top: 8px;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        
+        .smoke-btn:hover {
+            background: linear-gradient(180deg, #666, #444);
+            box-shadow: 
+                0 6px 20px rgba(150, 150, 150, 0.5),
+                inset 0 1px 0 rgba(255, 255, 255, 0.2);
+            transform: translateY(-1px);
+        }
+        
+        .smoke-btn:active,
+        .smoke-btn.active {
+            background: linear-gradient(180deg, #aaa, #888);
+            color: #222;
+            border-color: #ccc;
+            box-shadow: 
+                0 0 30px rgba(200, 200, 200, 0.6),
+                0 0 60px rgba(200, 200, 200, 0.3),
+                inset 0 2px 4px rgba(0, 0, 0, 0.2);
+            transform: translateY(1px);
+        }
+        
+        .smoke-btn .smoke-icon {
+            font-size: 20px;
+        }
+        
+        .smoke-btn.active .smoke-icon {
+            animation: smoke-puff 0.5s ease infinite;
+        }
+        
+        @keyframes smoke-puff {
+            0%, 100% { 
+                opacity: 1;
+                transform: scale(1);
+            }
+            50% { 
+                opacity: 0.7;
+                transform: scale(1.1);
+            }
+        }
     </style>
 </head>
 <body>
@@ -1319,6 +1384,10 @@
             <button type="button" id="strobo-btn" class="strobo-btn">
                 <span class="strobo-icon">⚡</span>
                 <span>STROBO</span>
+            </button>
+            <button type="button" id="smoke-btn" class="smoke-btn">
+                <span class="smoke-icon">💨</span>
+                <span>SMOKE</span>
             </button>
         </div>
     </div>
@@ -1519,6 +1588,40 @@
                         }
                     });
                     stroboBtn.addEventListener('mousedown', (e) => e.preventDefault()); // Prevent text selection
+                }
+                
+                // Smoke button - press and hold to emit smoke
+                const smokeBtn = document.getElementById('smoke-btn');
+                if (smokeBtn) {
+                    // Start smoke on mousedown/touchstart
+                    const startSmoke = (e) => {
+                        e.preventDefault();
+                        if (window.simulator) {
+                            window.simulator.getRendering().startSmoke();
+                            smokeBtn.classList.add('active');
+                        }
+                    };
+                    
+                    // Stop smoke on mouseup/touchend/mouseleave
+                    const stopSmoke = (e) => {
+                        if (window.simulator) {
+                            window.simulator.getRendering().stopSmoke();
+                            smokeBtn.classList.remove('active');
+                        }
+                    };
+                    
+                    // Mouse events
+                    smokeBtn.addEventListener('mousedown', startSmoke);
+                    smokeBtn.addEventListener('mouseup', stopSmoke);
+                    smokeBtn.addEventListener('mouseleave', stopSmoke);
+                    
+                    // Touch events for mobile
+                    smokeBtn.addEventListener('touchstart', startSmoke);
+                    smokeBtn.addEventListener('touchend', stopSmoke);
+                    smokeBtn.addEventListener('touchcancel', stopSmoke);
+                    
+                    // Prevent context menu on long press
+                    smokeBtn.addEventListener('contextmenu', (e) => e.preventDefault());
                 }
             }, 500);
         });
