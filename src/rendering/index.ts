@@ -912,6 +912,7 @@ export class RenderingEngine {
     hem.rotation.x = Math.PI / 2;  // Rotate so cylinder axis points along Z (disc in Z-X plane)
     hem.position.z = innerHeight + 0.1;
     hem.castShadow = true;
+    // Keep hem visible as the pink cap on top of skirt
     doll.add(hem);
     
     return doll;
@@ -935,8 +936,16 @@ export class RenderingEngine {
           // Scale and position the model
           // Adjust these values based on the actual model dimensions
           // The model's Y-axis becomes Z in the windmill's local coords
+          // Model's Y range in GLTF: -1.74 (feet) to 0.22 (head top)
+          // After scaling, the model is about 1.96 * 3.5 = 6.86 units tall
+          // The waist is roughly at Y = -0.5 in model coords (scaled: -0.5 * 3.5 = -1.75)
+          // Position so the waist aligns with skirt inner height (2.5)
+          // After rotation, model's Y becomes Z, so position.z sets vertical placement
           model.scale.set(3.5, 3.5, 3.5);  // Scaled up for better proportion with skirt
-          model.position.z = innerHeight - 3.0;  // Lowered so waist is at skirt level
+          const modelWaistY = -0.5;  // Waist position in original model Y coords
+          const scaledWaistOffset = modelWaistY * 3.5;  // = -1.75
+          // Position so that waist (at scaledWaistOffset below model origin) is at skirt level
+          model.position.z = innerHeight - scaledWaistOffset;  // 2.5 - (-1.75) = 4.25
           model.position.y = 0;
           
           // Rotate to stand upright
@@ -946,33 +955,64 @@ export class RenderingEngine {
           model.rotation.y = 0;
           model.rotation.z = 0;
           
+          // Enable clipping on the renderer to hide legs below skirt
+          this.renderer.localClippingEnabled = true;
+          
+          // Create a clipping plane in world coordinates to hide the legs
+          // The windmill group's Z is up, and the skirt inner edge is at Z = innerHeight = 2.5
+          // We want to clip anything below this level
+          // The plane normal (0, 0, 1) points up, and we clip where Z < innerHeight
+          const skirtTopZ = innerHeight;  // 2.5 in windmill local Z
+          const clipPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), -skirtTopZ);
+          
           // Apply fallback materials if textures failed to load
           // and enable shadows on all meshes
           model.traverse((child) => {
             if (child instanceof THREE.Mesh) {
+              const meshName = child.name.toLowerCase();
+              
               child.castShadow = true;
               child.receiveShadow = true;
               
-              // Check if material has missing textures and apply fallback
+              // Apply clipping plane to material to hide legs below skirt
               if (child.material) {
+                // Clone material to avoid affecting other meshes
+                if (Array.isArray(child.material)) {
+                  child.material = child.material.map(m => {
+                    const cloned = m.clone();
+                    cloned.clippingPlanes = [clipPlane];
+                    cloned.clipShadows = true;
+                    return cloned;
+                  });
+                } else {
+                  const clonedMat = child.material.clone();
+                  clonedMat.clippingPlanes = [clipPlane];
+                  clonedMat.clipShadows = true;
+                  child.material = clonedMat;
+                }
+                
                 const mat = child.material as THREE.MeshStandardMaterial;
                 // If material has no valid map or looks broken, apply a nice skin/dress material
                 if (mat.map === null || mat.map === undefined) {
                   // Determine material type based on mesh name or position
-                  const meshName = child.name.toLowerCase();
                   if (meshName.includes('hair') || meshName.includes('head')) {
                     child.material = this.materials.dollHair.clone();
+                    child.material.clippingPlanes = [clipPlane];
                   } else if (meshName.includes('dress') || meshName.includes('cloth') || meshName.includes('body')) {
                     child.material = this.materials.dollDress.clone();
+                    child.material.clippingPlanes = [clipPlane];
                   } else {
                     // Default to skin material
                     child.material = this.materials.dollSkin.clone();
+                    child.material.clippingPlanes = [clipPlane];
                   }
                 }
               }
             }
           });
           
+          // Hide the doll model for now (legs clipping issue)
+          model.visible = false;
           doll.add(model);
         } catch (e) {
           console.warn('Error processing ballerina model, using fallback:', e);
@@ -1136,6 +1176,11 @@ export class RenderingEngine {
     nose.position.set(0, 0.4 * dollScale, innerHeight + 2.05 * dollScale);
     nose.rotation.x = -Math.PI / 2;
     doll.add(nose);
+    
+    // Hide the fallback doll for now (along with GLTF model)
+    doll.traverse((child) => {
+      child.visible = false;
+    });
   }
   
   /**
