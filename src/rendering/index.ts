@@ -72,6 +72,8 @@ export class RenderingEngine {
   private rideLights: THREE.PointLight[] = [];
   private lightBulbs: THREE.Mesh[] = [];
   private lightColumns: THREE.Mesh[][] = [];  // 2D array: [column][bulb from top to bottom]
+  private underskirtLightBulbs: THREE.Mesh[] = [];  // Underskirt lights (always on, no animation)
+  private underskirtLightsEnabled: boolean = true;
   private balerinaDollGroup: THREE.Group | null = null;  // Container for ballerina doll (loaded or fallback)
   private gltfLoader: GLTFLoader;
   
@@ -879,6 +881,9 @@ export class RenderingEngine {
     // Create decorative lights on the skirt
     this.createRideLights();
     
+    // Create underskirt lights (dim, always on, 2/3 radius)
+    this.createUnderskirtLights();
+    
     // Create seats around the rim (part of windmill group so they rotate together)
     this.createSeatsOnRim();
     
@@ -1434,6 +1439,57 @@ export class RenderingEngine {
   }
   
   /**
+   * Create underskirt lights - similar to skirt lights but:
+   * - Positioned on the underside of the skirt
+   * - Only extend to 2/3 of skirt radius
+   * - Very dim (low emissive intensity)
+   * - Always lit (no animation)
+   */
+  private createUnderskirtLights(): void {
+    const numColumns = 16;  // Match overskirt columns
+    const bulbsPerColumn = 7;  // Fewer bulbs since only 2/3 radius
+    const innerRadius = 1.8;
+    const outerRadius = this.windmillRadius;
+    const innerHeight = 2.5;  // Match skirt cone height
+    const outerHeight = 0.0;
+    const thickness = 0.4;  // Skirt thickness
+    
+    // Only extend to 2/3 of the skirt radius
+    const maxRadiusFactor = 0.67;
+    
+    for (let col = 0; col < numColumns; col++) {
+      const angle = (col / numColumns) * Math.PI * 2;
+      
+      for (let row = 0; row < bulbsPerColumn; row++) {
+        // Interpolate position from inner to 2/3 of the way to outer
+        const t = (row + 0.5) / bulbsPerColumn * maxRadiusFactor;
+        const radius = innerRadius + (outerRadius - innerRadius) * t;
+        const topHeight = innerHeight + (outerHeight - innerHeight) * t;
+        // Position below the skirt (on the underside)
+        const height = topHeight - thickness - 0.05;  // Slightly below bottom surface
+        
+        const x = Math.cos(angle) * radius;
+        const y = Math.sin(angle) * radius;
+        
+        // Create bulb with dim, warm glow
+        const bulbMaterial = new THREE.MeshStandardMaterial({
+          color: 0xffeedd,  // Warm white
+          emissive: 0xffaa66,  // Warm orange glow
+          emissiveIntensity: 0.15,  // Very dim
+        });
+        
+        // Smaller bulbs for underskirt
+        const bulbGeom = new THREE.SphereGeometry(0.08, 8, 8);
+        const bulb = new THREE.Mesh(bulbGeom, bulbMaterial);
+        bulb.position.set(x, y, height);
+        
+        this.windmillGroup!.add(bulb);
+        this.underskirtLightBulbs.push(bulb);
+      }
+    }
+  }
+  
+  /**
    * Create a rim-mounted seat (simpler than full cabin)
    * Seats are positioned along the outer edge of the skirt
    */
@@ -1857,6 +1913,34 @@ export class RenderingEngine {
    */
   getLightsEnabled(): boolean {
     return this.lightsEnabled;
+  }
+  
+  /**
+   * Set underskirt lights on/off
+   * These lights are always lit (no animation) when enabled
+   */
+  setUnderskirtLightsEnabled(enabled: boolean): void {
+    this.underskirtLightsEnabled = enabled;
+    
+    for (const bulb of this.underskirtLightBulbs) {
+      const material = bulb.material as THREE.MeshStandardMaterial;
+      if (enabled) {
+        // Lights on: dim warm glow
+        material.emissiveIntensity = 0.15;
+        material.color.setHex(0xffeedd);
+      } else {
+        // Lights off: no glow, dull appearance
+        material.emissiveIntensity = 0;
+        material.color.setHex(0x666666);
+      }
+    }
+  }
+  
+  /**
+   * Get underskirt lights enabled state
+   */
+  getUnderskirtLightsEnabled(): boolean {
+    return this.underskirtLightsEnabled;
   }
   
   /**
