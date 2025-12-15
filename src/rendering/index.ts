@@ -46,6 +46,16 @@ interface MaterialSet {
   dollDress: THREE.MeshStandardMaterial;
   dollSkin: THREE.MeshStandardMaterial;
   dollHair: THREE.MeshStandardMaterial;
+  // Surrounding structure materials
+  deckMetal: THREE.MeshStandardMaterial;
+  flashPanelPink: THREE.MeshStandardMaterial;
+  flashPanelGold: THREE.MeshStandardMaterial;
+  flashPanelWhite: THREE.MeshStandardMaterial;
+  controlCabin: THREE.MeshStandardMaterial;
+  controlCabinGlass: THREE.MeshStandardMaterial;
+  stairMetal: THREE.MeshStandardMaterial;
+  stairRubber: THREE.MeshStandardMaterial;
+  loudspeaker: THREE.MeshStandardMaterial;
 }
 
 /**
@@ -77,6 +87,11 @@ export class RenderingEngine {
   private balerinaDollGroup: THREE.Group | null = null;  // Container for ballerina doll (loaded or fallback)
   private gltfLoader: GLTFLoader;
   
+  // Surrounding structure elements
+  private surroundingGroup: THREE.Group | null = null;
+  private flashPanelLights: THREE.Mesh[] = [];  // Light bulbs on flash panels
+  private flashPanelPointLights: THREE.PointLight[] = [];  // Point lights for glow
+  
   // Legacy compatibility
   private platformMesh: THREE.Mesh | null = null;
   
@@ -107,6 +122,10 @@ export class RenderingEngine {
   private platformRadius: number;
   private windmillRadius: number;
   private materials: MaterialSet;
+  
+  // Deck and platform height configuration
+  private readonly DECK_HEIGHT = 0.8;  // Height of the walkway deck
+  private readonly PLATFORM_BASE_HEIGHT = 1.1;  // Height of rotating platform base (above deck)
   
   /**
    * Create a new rendering engine
@@ -271,6 +290,60 @@ export class RenderingEngine {
         color: 0x2a1a0a,  // Dark brown hair
         metalness: 0.1,
         roughness: 0.7,
+      }),
+      // Surrounding structure materials
+      deckMetal: new THREE.MeshStandardMaterial({
+        color: 0x4a4a4a,  // Dark gray metal
+        metalness: 0.7,
+        roughness: 0.75,  // Rough surface for grip
+      }),
+      flashPanelPink: new THREE.MeshStandardMaterial({
+        color: 0xff69b4,  // Hot pink
+        metalness: 0.2,
+        roughness: 0.4,
+        emissive: 0xff69b4,
+        emissiveIntensity: 0.08,
+      }),
+      flashPanelGold: new THREE.MeshStandardMaterial({
+        color: 0xffcc00,  // Gold
+        metalness: 0.6,
+        roughness: 0.3,
+        emissive: 0xffaa00,
+        emissiveIntensity: 0.15,
+      }),
+      flashPanelWhite: new THREE.MeshStandardMaterial({
+        color: 0xfff5ee,  // Seashell white with warm tint
+        metalness: 0.15,
+        roughness: 0.5,
+        emissive: 0xffeedd,
+        emissiveIntensity: 0.05,
+      }),
+      controlCabin: new THREE.MeshStandardMaterial({
+        color: 0x445566,  // Blue-gray metal
+        metalness: 0.7,
+        roughness: 0.4,
+      }),
+      controlCabinGlass: new THREE.MeshStandardMaterial({
+        color: 0x88ccff,  // Light blue glass
+        metalness: 0.1,
+        roughness: 0.1,
+        transparent: true,
+        opacity: 0.6,
+      }),
+      stairMetal: new THREE.MeshStandardMaterial({
+        color: 0x555555,  // Dark metal
+        metalness: 0.8,
+        roughness: 0.35,
+      }),
+      stairRubber: new THREE.MeshStandardMaterial({
+        color: 0x222222,  // Black rubber grip
+        metalness: 0.0,
+        roughness: 0.95,
+      }),
+      loudspeaker: new THREE.MeshStandardMaterial({
+        color: 0x333333,  // Dark gray
+        metalness: 0.5,
+        roughness: 0.6,
       }),
     };
   }
@@ -717,6 +790,9 @@ export class RenderingEngine {
     // Mast removed - was too prominent/lighthouse-like
     // Pivot marker removed - bar end cap now serves as pivot indicator
     this.createWindmillGroup();
+    
+    // Create surrounding fairground structure
+    this.createSurroundingStructure();
   }
   
   /**
@@ -724,6 +800,9 @@ export class RenderingEngine {
    */
   private createPlatform(): void {
     this.platformGroup = new THREE.Group();
+    
+    // Position the entire platform group above the deck
+    this.platformGroup.position.y = this.PLATFORM_BASE_HEIGHT;
     
     // Main platform disc
     const platformGeom = new THREE.CylinderGeometry(
@@ -786,7 +865,7 @@ export class RenderingEngine {
     });
     
     this.radiusBar = new THREE.Mesh(barGeom, barMaterial);
-    this.radiusBar.position.set(0, 0.38, 0);
+    this.radiusBar.position.set(0, this.PLATFORM_BASE_HEIGHT + 0.38, 0);
     this.radiusBar.castShadow = true;
     this.radiusBar.receiveShadow = true;
     
@@ -833,7 +912,7 @@ export class RenderingEngine {
     
     // Position and rotate the bar in world coordinates
     // Negate the angle because Three.js Y-rotation convention: +X rotates toward -Z
-    this.radiusBar.position.set(barCenterX, 0.38, barCenterZ);
+    this.radiusBar.position.set(barCenterX, this.PLATFORM_BASE_HEIGHT + 0.38, barCenterZ);
     this.radiusBar.rotation.y = -platformPhase;  // Align bar along the pivot-to-opposite direction
   }
   
@@ -964,7 +1043,7 @@ export class RenderingEngine {
     
     // Calculate pivot point in world coordinates
     const pivotWorldX = pivotRadius * Math.cos(platformPhase);
-    const pivotWorldY = 0.38;  // Same height as radius bar
+    const pivotWorldY = this.PLATFORM_BASE_HEIGHT + 0.38;  // Same height as radius bar
     const pivotWorldZ = pivotRadius * Math.sin(platformPhase);
     
     // Calculate secondary platform center (same logic as in update method)
@@ -976,7 +1055,7 @@ export class RenderingEngine {
     const centerZ_plat = centerOffsetZ_plat;
     
     const platCenterWorldX = centerX_plat * Math.cos(platformPhase) - centerY_plat * Math.sin(platformPhase);
-    const platCenterWorldY = centerZ_plat + 0.5;  // Y in world is Z in platform coords + base height
+    const platCenterWorldY = centerZ_plat + this.PLATFORM_BASE_HEIGHT + 0.5;  // Y in world is Z in platform coords + base height
     const platCenterWorldZ = centerX_plat * Math.sin(platformPhase) + centerY_plat * Math.cos(platformPhase);
     
     // Skirt cone parameters (must match createSkirt)
@@ -1654,6 +1733,636 @@ export class RenderingEngine {
   }
   
   /**
+   * Create surrounding fairground structure
+   * Includes: platform deck, back flash panels, stairs, loudspeakers
+   */
+  private createSurroundingStructure(): void {
+    this.surroundingGroup = new THREE.Group();
+    
+    // Create the raised platform/deck where passengers walk
+    this.createPlatformDeck();
+    
+    // Create decorative back flash panels (semicircle behind the ride)
+    this.createBackFlashPanels();
+    
+    // Create access stairs
+    this.createAccessStairs();
+    
+    // Create loudspeaker poles
+    this.createLoudspeakers();
+    
+    this.scene.add(this.surroundingGroup);
+  }
+  
+  /**
+   * Create the raised platform deck where passengers walk
+   * Extends slightly beyond the ride platform with wooden/metal decking
+   */
+  private createPlatformDeck(): void {
+    // Deck must be large enough for windmill at max swing + walking space
+    // Slightly smaller radius for tighter fit
+    const deckRadius = this.platformRadius + this.windmillRadius + 1;  // Tighter deck area
+    const deckHeight = this.DECK_HEIGHT;  // Raised platform
+    const deckThickness = 0.15;
+    
+    // Main deck surface - larger octagonal/circular shape with rough metal
+    const deckGeom = new THREE.CylinderGeometry(deckRadius, deckRadius + 0.2, deckThickness, 32);
+    const deck = new THREE.Mesh(deckGeom, this.materials.deckMetal);
+    deck.position.y = deckHeight;
+    deck.receiveShadow = true;
+    deck.castShadow = true;
+    this.surroundingGroup!.add(deck);
+    
+    // Deck support structure (cylindrical base)
+    const supportGeom = new THREE.CylinderGeometry(deckRadius + 0.2, deckRadius + 0.5, deckHeight, 32, 1, true);
+    const support = new THREE.Mesh(supportGeom, this.materials.stairMetal);
+    support.position.y = deckHeight / 2;
+    support.receiveShadow = true;
+    this.surroundingGroup!.add(support);
+    
+    // Decorative edge trim around deck
+    const trimGeom = new THREE.TorusGeometry(deckRadius, 0.08, 8, 64);
+    const trim = new THREE.Mesh(trimGeom, this.materials.chrome);
+    trim.rotation.x = Math.PI / 2;
+    trim.position.y = deckHeight + deckThickness / 2;
+    this.surroundingGroup!.add(trim);
+    
+    // Safety railing posts around the outer edge (except where stairs are)
+    const railingHeight = 1.0;
+    const postCount = 24;
+    const stairAngle = Math.PI;  // Stairs at the back
+    const stairWidth = Math.PI / 4;  // Width of stair opening
+    
+    for (let i = 0; i < postCount; i++) {
+      const angle = (i / postCount) * Math.PI * 2;
+      
+      // Skip posts where stairs are
+      if (Math.abs(angle - stairAngle) < stairWidth / 2 || 
+          Math.abs(angle - stairAngle + Math.PI * 2) < stairWidth / 2) {
+        continue;
+      }
+      
+      const x = Math.cos(angle) * deckRadius;
+      const z = Math.sin(angle) * deckRadius;
+      
+      // Railing post
+      const postGeom = new THREE.CylinderGeometry(0.04, 0.04, railingHeight, 8);
+      const post = new THREE.Mesh(postGeom, this.materials.chrome);
+      post.position.set(x, deckHeight + railingHeight / 2, z);
+      post.castShadow = true;
+      this.surroundingGroup!.add(post);
+      
+      // Post top cap
+      const capGeom = new THREE.SphereGeometry(0.06, 8, 8);
+      const cap = new THREE.Mesh(capGeom, this.materials.chrome);
+      cap.position.set(x, deckHeight + railingHeight, z);
+      this.surroundingGroup!.add(cap);
+    }
+    
+    // Horizontal railing bars
+    const railBarRadius = deckRadius;
+    for (let ring = 0; ring < 2; ring++) {
+      const ringHeight = deckHeight + 0.4 + ring * 0.3;
+      const railGeom = new THREE.TorusGeometry(railBarRadius, 0.025, 8, 64, Math.PI * 2 - stairWidth);
+      const rail = new THREE.Mesh(railGeom, this.materials.chrome);
+      rail.rotation.x = Math.PI / 2;
+      rail.rotation.z = stairAngle + stairWidth / 2;  // Start after stair opening
+      rail.position.y = ringHeight;
+      this.surroundingGroup!.add(rail);
+    }
+  }
+  
+  /**
+   * Create decorative back flash panels typical of fairground rides
+   * Semicircular arrangement with lights and ornate decorations
+   * Panels extend directly from the platform edge with no gap
+   */
+  private createBackFlashPanels(): void {
+    const panelGroup = new THREE.Group();
+    
+    const deckRadius = this.platformRadius + this.windmillRadius + 1;
+    const baseRadius = deckRadius;  // Panels at the deck edge (no gap)
+    const panelCount = 11;  // More panels to cover the arc tightly
+    const arcSpan = Math.PI * 0.9;  // Wide arc coverage
+    const centerAngle = 0;  // Centered at front of ride
+    
+    const panelWidth = 3.2;  // Slightly narrower for tighter fit
+    const panelHeight = 5.5;
+    const panelDepth = 0.3;
+    const deckHeight = this.DECK_HEIGHT;
+    
+    for (let i = 0; i < panelCount; i++) {
+      const t = (i - (panelCount - 1) / 2) / ((panelCount - 1) / 2);  // -1 to 1
+      const angle = centerAngle + t * (arcSpan / 2);
+      
+      const x = Math.cos(angle) * baseRadius;
+      const z = Math.sin(angle) * baseRadius;
+      
+      // Main panel backing - alternating pink and white
+      const panelGeom = new THREE.BoxGeometry(panelWidth, panelHeight, panelDepth);
+      const panelMaterial = i % 2 === 0 ? this.materials.flashPanelPink : this.materials.flashPanelWhite;
+      const panel = new THREE.Mesh(panelGeom, panelMaterial);
+      panel.position.set(x, deckHeight + panelHeight / 2, z);
+      panel.rotation.y = -angle + Math.PI / 2;  // Face inward
+      panel.castShadow = true;
+      panel.receiveShadow = true;
+      panelGroup.add(panel);
+      
+      // Ornate top piece (crown)
+      const crownGeom = new THREE.BoxGeometry(panelWidth + 0.4, 0.8, panelDepth + 0.1);
+      const crown = new THREE.Mesh(crownGeom, this.materials.flashPanelGold);
+      crown.position.set(x, deckHeight + panelHeight + 0.3, z);
+      crown.rotation.y = -angle + Math.PI / 2;
+      panelGroup.add(crown);
+      
+      // Decorative spire on top
+      const spireGeom = new THREE.ConeGeometry(0.2, 0.8, 8);
+      const spire = new THREE.Mesh(spireGeom, this.materials.flashPanelGold);
+      spire.position.set(x, deckHeight + panelHeight + 0.9, z);
+      panelGroup.add(spire);
+      
+      // Frame edges
+      const frameThickness = 0.15;
+      const frameMaterial = this.materials.flashPanelGold;
+      
+      // Left frame
+      const leftFrameGeom = new THREE.BoxGeometry(frameThickness, panelHeight, panelDepth + 0.05);
+      const leftFrame = new THREE.Mesh(leftFrameGeom, frameMaterial);
+      leftFrame.position.set(
+        x - Math.cos(-angle + Math.PI / 2) * (panelWidth / 2 - frameThickness / 2),
+        deckHeight + panelHeight / 2,
+        z - Math.sin(-angle + Math.PI / 2) * (panelWidth / 2 - frameThickness / 2)
+      );
+      leftFrame.rotation.y = -angle + Math.PI / 2;
+      panelGroup.add(leftFrame);
+      
+      // Right frame
+      const rightFrame = new THREE.Mesh(leftFrameGeom, frameMaterial);
+      rightFrame.position.set(
+        x + Math.cos(-angle + Math.PI / 2) * (panelWidth / 2 - frameThickness / 2),
+        deckHeight + panelHeight / 2,
+        z + Math.sin(-angle + Math.PI / 2) * (panelWidth / 2 - frameThickness / 2)
+      );
+      rightFrame.rotation.y = -angle + Math.PI / 2;
+      panelGroup.add(rightFrame);
+      
+      // Add light bulbs to the panel - 2 rows
+      this.addFlashPanelLights(panelGroup, x, z, angle, panelWidth, panelHeight, deckHeight);
+    }
+    
+    // Center arch/banner at the top
+    const archRadius = baseRadius - 0.3;
+    const archHeight = deckHeight + panelHeight + 1.5;
+    
+    // Banner text backing (simplified arch shape)
+    const bannerGeom = new THREE.BoxGeometry(6, 1.2, 0.2);
+    const banner = new THREE.Mesh(bannerGeom, this.materials.flashPanelGold);
+    banner.position.set(archRadius, archHeight, 0);
+    banner.rotation.y = Math.PI / 2;
+    panelGroup.add(banner);
+    
+    // "BALLERINA" text would go here - using decorative spheres for now
+    const textLights = 9;
+    for (let i = 0; i < textLights; i++) {
+      const tx = (i - (textLights - 1) / 2) * 0.6;
+      const lightGeom = new THREE.SphereGeometry(0.12, 8, 8);
+      const lightMat = new THREE.MeshStandardMaterial({
+        color: 0xffffaa,
+        emissive: 0xffaa44,
+        emissiveIntensity: 1.5,
+      });
+      const light = new THREE.Mesh(lightGeom, lightMat);
+      light.position.set(archRadius + 0.15, archHeight, tx);
+      panelGroup.add(light);
+      this.flashPanelLights.push(light);
+    }
+    
+    this.surroundingGroup!.add(panelGroup);
+  }
+  
+  /**
+   * Add decorative light bulbs to a flash panel
+   */
+  private addFlashPanelLights(
+    group: THREE.Group,
+    panelX: number, 
+    panelZ: number, 
+    angle: number,
+    panelWidth: number,
+    panelHeight: number,
+    deckHeight: number
+  ): void {
+    const lightsPerRow = 5;
+    const rows = 2;
+    const offsetFromPanel = 0.2;  // How far in front of panel
+    
+    for (let row = 0; row < rows; row++) {
+      const rowY = deckHeight + 0.8 + row * (panelHeight - 1.5);
+      
+      for (let i = 0; i < lightsPerRow; i++) {
+        const t = (i - (lightsPerRow - 1) / 2) / ((lightsPerRow - 1) / 2);  // -1 to 1
+        const localX = t * (panelWidth / 2 - 0.3);
+        
+        // Calculate world position
+        const forward = new THREE.Vector3(
+          Math.cos(angle),
+          0,
+          Math.sin(angle)
+        );
+        const right = new THREE.Vector3(
+          -Math.sin(angle),
+          0,
+          Math.cos(angle)
+        );
+        
+        const worldX = panelX + forward.x * offsetFromPanel + right.x * localX;
+        const worldZ = panelZ + forward.z * offsetFromPanel + right.z * localX;
+        
+        // Light bulb
+        const bulbMat = new THREE.MeshStandardMaterial({
+          color: row === 0 ? 0xffeecc : 0xffffff,
+          emissive: row === 0 ? 0xffaa44 : 0xffffaa,
+          emissiveIntensity: 0.8,
+        });
+        const bulbGeom = new THREE.SphereGeometry(0.1, 8, 8);
+        const bulb = new THREE.Mesh(bulbGeom, bulbMat);
+        bulb.position.set(worldX, rowY, worldZ);
+        group.add(bulb);
+        this.flashPanelLights.push(bulb);
+        
+        // Add a point light for every 3rd bulb
+        if (i % 3 === 1 && row === 0) {
+          const pointLight = new THREE.PointLight(0xffaa44, 0.3, 8, 2);
+          pointLight.position.set(worldX, rowY, worldZ);
+          group.add(pointLight);
+          this.flashPanelPointLights.push(pointLight);
+        }
+      }
+    }
+  }
+  
+  /**
+   * Create operator control cabin
+   * Positioned at the side of the platform
+   */
+  private createControlCabin(): void {
+    const cabinGroup = new THREE.Group();
+    
+    const cabinWidth = 2.5;
+    const cabinDepth = 2.0;
+    const cabinHeight = 2.5;
+    const deckHeight = this.DECK_HEIGHT;
+    const deckRadius = this.platformRadius + this.windmillRadius + 1;
+    
+    // Position cabin at side of platform, at the deck edge
+    const cabinAngle = Math.PI * 0.6;  // Left side
+    const cabinRadius = deckRadius - 2.0;  // Inside the deck edge
+    const cabinX = Math.cos(cabinAngle) * cabinRadius;
+    const cabinZ = Math.sin(cabinAngle) * cabinRadius;
+    
+    // Cabin base/floor
+    const floorGeom = new THREE.BoxGeometry(cabinWidth, 0.15, cabinDepth);
+    const floor = new THREE.Mesh(floorGeom, this.materials.stairMetal);
+    floor.position.set(cabinX, deckHeight + 0.08, cabinZ);
+    floor.rotation.y = -cabinAngle + Math.PI / 2;
+    cabinGroup.add(floor);
+    
+    // Cabin walls (3 walls, front is open with window)
+    const wallThickness = 0.1;
+    
+    // Back wall
+    const backWallGeom = new THREE.BoxGeometry(cabinWidth, cabinHeight, wallThickness);
+    const backWall = new THREE.Mesh(backWallGeom, this.materials.controlCabin);
+    backWall.position.set(
+      cabinX - Math.sin(cabinAngle) * (cabinDepth / 2 - wallThickness / 2),
+      deckHeight + cabinHeight / 2,
+      cabinZ + Math.cos(cabinAngle) * (cabinDepth / 2 - wallThickness / 2)
+    );
+    backWall.rotation.y = -cabinAngle + Math.PI / 2;
+    backWall.castShadow = true;
+    cabinGroup.add(backWall);
+    
+    // Left wall
+    const sideWallGeom = new THREE.BoxGeometry(wallThickness, cabinHeight, cabinDepth);
+    const leftWall = new THREE.Mesh(sideWallGeom, this.materials.controlCabin);
+    leftWall.position.set(
+      cabinX - Math.cos(cabinAngle) * (cabinWidth / 2 - wallThickness / 2),
+      deckHeight + cabinHeight / 2,
+      cabinZ - Math.sin(cabinAngle) * (cabinWidth / 2 - wallThickness / 2)
+    );
+    leftWall.rotation.y = -cabinAngle + Math.PI / 2;
+    leftWall.castShadow = true;
+    cabinGroup.add(leftWall);
+    
+    // Right wall
+    const rightWall = new THREE.Mesh(sideWallGeom, this.materials.controlCabin);
+    rightWall.position.set(
+      cabinX + Math.cos(cabinAngle) * (cabinWidth / 2 - wallThickness / 2),
+      deckHeight + cabinHeight / 2,
+      cabinZ + Math.sin(cabinAngle) * (cabinWidth / 2 - wallThickness / 2)
+    );
+    rightWall.rotation.y = -cabinAngle + Math.PI / 2;
+    rightWall.castShadow = true;
+    cabinGroup.add(rightWall);
+    
+    // Front window frame (lower portion is solid counter)
+    const counterHeight = 1.0;
+    const counterGeom = new THREE.BoxGeometry(cabinWidth, counterHeight, wallThickness);
+    const counter = new THREE.Mesh(counterGeom, this.materials.controlCabin);
+    counter.position.set(
+      cabinX + Math.sin(cabinAngle) * (cabinDepth / 2 - wallThickness / 2),
+      deckHeight + counterHeight / 2,
+      cabinZ - Math.cos(cabinAngle) * (cabinDepth / 2 - wallThickness / 2)
+    );
+    counter.rotation.y = -cabinAngle + Math.PI / 2;
+    cabinGroup.add(counter);
+    
+    // Window glass
+    const windowHeight = cabinHeight - counterHeight - 0.3;
+    const windowGeom = new THREE.BoxGeometry(cabinWidth - 0.3, windowHeight, 0.05);
+    const window = new THREE.Mesh(windowGeom, this.materials.controlCabinGlass);
+    window.position.set(
+      cabinX + Math.sin(cabinAngle) * (cabinDepth / 2 - wallThickness / 2),
+      deckHeight + counterHeight + windowHeight / 2 + 0.1,
+      cabinZ - Math.cos(cabinAngle) * (cabinDepth / 2 - wallThickness / 2)
+    );
+    window.rotation.y = -cabinAngle + Math.PI / 2;
+    cabinGroup.add(window);
+    
+    // Roof
+    const roofGeom = new THREE.BoxGeometry(cabinWidth + 0.4, 0.15, cabinDepth + 0.4);
+    const roof = new THREE.Mesh(roofGeom, this.materials.controlCabin);
+    roof.position.set(cabinX, deckHeight + cabinHeight + 0.08, cabinZ);
+    roof.rotation.y = -cabinAngle + Math.PI / 2;
+    roof.castShadow = true;
+    cabinGroup.add(roof);
+    
+    // Roof overhang trim
+    const roofTrimGeom = new THREE.BoxGeometry(cabinWidth + 0.6, 0.08, cabinDepth + 0.6);
+    const roofTrim = new THREE.Mesh(roofTrimGeom, this.materials.flashPanelGold);
+    roofTrim.position.set(cabinX, deckHeight + cabinHeight + 0.2, cabinZ);
+    roofTrim.rotation.y = -cabinAngle + Math.PI / 2;
+    cabinGroup.add(roofTrim);
+    
+    // Control panel (on counter)
+    const panelGeom = new THREE.BoxGeometry(1.5, 0.3, 0.4);
+    const panelMat = new THREE.MeshStandardMaterial({
+      color: 0x222222,
+      metalness: 0.3,
+      roughness: 0.6,
+    });
+    const controlPanel = new THREE.Mesh(panelGeom, panelMat);
+    controlPanel.position.set(
+      cabinX + Math.sin(cabinAngle) * (cabinDepth / 2 - 0.4),
+      deckHeight + counterHeight + 0.15,
+      cabinZ - Math.cos(cabinAngle) * (cabinDepth / 2 - 0.4)
+    );
+    controlPanel.rotation.y = -cabinAngle + Math.PI / 2;
+    controlPanel.rotation.x = -0.3;  // Angled toward operator
+    cabinGroup.add(controlPanel);
+    
+    // Indicator lights on panel
+    const indicatorColors = [0x00ff00, 0xffff00, 0xff0000];
+    for (let i = 0; i < 3; i++) {
+      const indicatorGeom = new THREE.SphereGeometry(0.05, 8, 8);
+      const indicatorMat = new THREE.MeshStandardMaterial({
+        color: indicatorColors[i],
+        emissive: indicatorColors[i],
+        emissiveIntensity: 0.8,
+      });
+      const indicator = new THREE.Mesh(indicatorGeom, indicatorMat);
+      const offsetX = (i - 1) * 0.2;
+      indicator.position.set(
+        cabinX + Math.sin(cabinAngle) * (cabinDepth / 2 - 0.3) + Math.cos(cabinAngle) * offsetX,
+        deckHeight + counterHeight + 0.35,
+        cabinZ - Math.cos(cabinAngle) * (cabinDepth / 2 - 0.3) + Math.sin(cabinAngle) * offsetX
+      );
+      cabinGroup.add(indicator);
+    }
+    
+    this.surroundingGroup!.add(cabinGroup);
+  }
+  
+  /**
+   * Create access stairs leading up to the platform
+   */
+  private createAccessStairs(): void {
+    const stairGroup = new THREE.Group();
+    
+    const deckHeight = this.DECK_HEIGHT;
+    const deckRadius = this.platformRadius + this.windmillRadius + 1;
+    const stairAngle = Math.PI;  // Stairs at the back
+    
+    const stepCount = 4;
+    const stepWidth = 2.5;
+    const stepDepth = 0.35;
+    const stepHeight = deckHeight / stepCount;
+    const stepThickness = 0.08;
+    
+    // Calculate stair direction
+    const stairDirX = Math.cos(stairAngle);
+    const stairDirZ = Math.sin(stairAngle);
+    
+    // Starting position (at deck edge)
+    const startX = Math.cos(stairAngle) * deckRadius;
+    const startZ = Math.sin(stairAngle) * deckRadius;
+    
+    for (let i = 0; i < stepCount; i++) {
+      const stepY = deckHeight - (i + 1) * stepHeight;
+      const stepX = startX + stairDirX * (i + 0.5) * stepDepth;
+      const stepZ = startZ + stairDirZ * (i + 0.5) * stepDepth;
+      
+      // Step tread (top surface)
+      const treadGeom = new THREE.BoxGeometry(stepWidth, stepThickness, stepDepth);
+      const tread = new THREE.Mesh(treadGeom, this.materials.stairMetal);
+      tread.position.set(stepX, stepY + stepHeight / 2, stepZ);
+      tread.rotation.y = stairAngle + Math.PI / 2;
+      tread.receiveShadow = true;
+      tread.castShadow = true;
+      stairGroup.add(tread);
+      
+      // Step riser (vertical face)
+      const riserGeom = new THREE.BoxGeometry(stepWidth, stepHeight - stepThickness, stepThickness / 2);
+      const riser = new THREE.Mesh(riserGeom, this.materials.stairMetal);
+      riser.position.set(
+        stepX - stairDirX * (stepDepth / 2 - stepThickness / 4),
+        stepY + (stepHeight - stepThickness) / 2,
+        stepZ - stairDirZ * (stepDepth / 2 - stepThickness / 4)
+      );
+      riser.rotation.y = stairAngle + Math.PI / 2;
+      stairGroup.add(riser);
+      
+      // Anti-slip grip strip
+      const gripGeom = new THREE.BoxGeometry(stepWidth - 0.2, 0.02, stepDepth - 0.1);
+      const grip = new THREE.Mesh(gripGeom, this.materials.stairRubber);
+      grip.position.set(stepX, stepY + stepHeight / 2 + stepThickness / 2 + 0.01, stepZ);
+      grip.rotation.y = stairAngle + Math.PI / 2;
+      stairGroup.add(grip);
+    }
+    
+    // Stair handrails
+    const railHeight = 0.9;
+    const railWidth = stepWidth / 2 + 0.2;
+    const railLength = stepCount * stepDepth + 0.5;
+    const railAngle = Math.atan2(deckHeight, stepCount * stepDepth);  // Angle of stair slope
+    
+    for (const side of [-1, 1]) {
+      // Handrail posts (bottom)
+      const bottomPostGeom = new THREE.CylinderGeometry(0.04, 0.04, railHeight, 8);
+      const bottomPost = new THREE.Mesh(bottomPostGeom, this.materials.chrome);
+      bottomPost.position.set(
+        startX + stairDirX * (stepCount * stepDepth) - stairDirZ * side * railWidth,
+        railHeight / 2,
+        startZ + stairDirZ * (stepCount * stepDepth) + stairDirX * side * railWidth
+      );
+      stairGroup.add(bottomPost);
+      
+      // Handrail posts (top)
+      const topPostGeom = new THREE.CylinderGeometry(0.04, 0.04, railHeight, 8);
+      const topPost = new THREE.Mesh(topPostGeom, this.materials.chrome);
+      topPost.position.set(
+        startX - stairDirZ * side * railWidth,
+        deckHeight + railHeight / 2,
+        startZ + stairDirX * side * railWidth
+      );
+      stairGroup.add(topPost);
+      
+      // Sloped handrail bar
+      const railBarLength = Math.sqrt(railLength * railLength + deckHeight * deckHeight);
+      const railBarGeom = new THREE.CylinderGeometry(0.035, 0.035, railBarLength, 8);
+      const railBar = new THREE.Mesh(railBarGeom, this.materials.chrome);
+      
+      const railMidX = startX + stairDirX * (stepCount * stepDepth / 2) - stairDirZ * side * railWidth;
+      const railMidZ = startZ + stairDirZ * (stepCount * stepDepth / 2) + stairDirX * side * railWidth;
+      const railMidY = deckHeight / 2 + railHeight;
+      
+      railBar.position.set(railMidX, railMidY, railMidZ);
+      railBar.rotation.z = railAngle;
+      railBar.rotation.y = stairAngle + Math.PI / 2;
+      stairGroup.add(railBar);
+      
+      // Post caps
+      const capGeom = new THREE.SphereGeometry(0.06, 8, 8);
+      const bottomCap = new THREE.Mesh(capGeom, this.materials.chrome);
+      bottomCap.position.set(
+        startX + stairDirX * (stepCount * stepDepth) - stairDirZ * side * railWidth,
+        railHeight,
+        startZ + stairDirZ * (stepCount * stepDepth) + stairDirX * side * railWidth
+      );
+      stairGroup.add(bottomCap);
+      
+      const topCap = new THREE.Mesh(capGeom, this.materials.chrome);
+      topCap.position.set(
+        startX - stairDirZ * side * railWidth,
+        deckHeight + railHeight,
+        startZ + stairDirX * side * railWidth
+      );
+      stairGroup.add(topCap);
+    }
+    
+    // Landing platform at bottom of stairs
+    const landingGeom = new THREE.BoxGeometry(stepWidth + 0.6, 0.1, 1.5);
+    const landing = new THREE.Mesh(landingGeom, this.materials.stairMetal);
+    landing.position.set(
+      startX + stairDirX * (stepCount * stepDepth + 0.75),
+      0.05,
+      startZ + stairDirZ * (stepCount * stepDepth + 0.75)
+    );
+    landing.rotation.y = stairAngle + Math.PI / 2;
+    landing.receiveShadow = true;
+    stairGroup.add(landing);
+    
+    this.surroundingGroup!.add(stairGroup);
+  }
+  
+  /**
+   * Create loudspeaker poles around the ride
+   */
+  private createLoudspeakers(): void {
+    const speakerGroup = new THREE.Group();
+    
+    const deckRadius = this.platformRadius + this.windmillRadius + 1;
+    const deckHeight = this.DECK_HEIGHT;
+    const poleHeight = 5.0;  // Pole height
+    
+    // Place 4 loudspeaker poles around the ride
+    const speakerAngles = [
+      Math.PI * 0.2,    // Front-right
+      -Math.PI * 0.2,   // Front-left
+      Math.PI * 0.7,    // Back-right
+      -Math.PI * 0.7,   // Back-left
+    ];
+    
+    for (const angle of speakerAngles) {
+      const x = Math.cos(angle) * (deckRadius - 0.5);
+      const z = Math.sin(angle) * (deckRadius - 0.5);
+      
+      // Pole
+      const poleGeom = new THREE.CylinderGeometry(0.08, 0.1, poleHeight, 8);
+      const pole = new THREE.Mesh(poleGeom, this.materials.chrome);
+      pole.position.set(x, deckHeight + poleHeight / 2, z);
+      pole.castShadow = true;
+      speakerGroup.add(pole);
+      
+      // Pole base
+      const baseGeom = new THREE.CylinderGeometry(0.15, 0.2, 0.15, 8);
+      const base = new THREE.Mesh(baseGeom, this.materials.stairMetal);
+      base.position.set(x, deckHeight + 0.08, z);
+      speakerGroup.add(base);
+      
+      // Speaker horn (conical)
+      const hornGeom = new THREE.ConeGeometry(0.35, 0.5, 8, 1, true);
+      const horn = new THREE.Mesh(hornGeom, this.materials.loudspeaker);
+      horn.position.set(x, deckHeight + poleHeight - 0.3, z);
+      horn.rotation.x = Math.PI;  // Opening faces down-outward
+      horn.rotation.z = -angle + Math.PI;  // Point outward
+      speakerGroup.add(horn);
+      
+      // Speaker mounting bracket
+      const bracketGeom = new THREE.BoxGeometry(0.15, 0.15, 0.3);
+      const bracket = new THREE.Mesh(bracketGeom, this.materials.stairMetal);
+      bracket.position.set(
+        x + Math.cos(angle) * 0.15,
+        deckHeight + poleHeight - 0.5,
+        z + Math.sin(angle) * 0.15
+      );
+      bracket.rotation.y = -angle;
+      speakerGroup.add(bracket);
+      
+      // Second horn (horn pair)
+      const horn2 = new THREE.Mesh(hornGeom, this.materials.loudspeaker);
+      horn2.position.set(
+        x + Math.cos(angle) * 0.1,
+        deckHeight + poleHeight - 0.7,
+        z + Math.sin(angle) * 0.1
+      );
+      horn2.rotation.x = Math.PI + 0.3;  // Slight downward angle
+      horn2.rotation.z = -angle + Math.PI;
+      speakerGroup.add(horn2);
+      
+      // Decorative light on top of pole
+      const topLightGeom = new THREE.SphereGeometry(0.12, 8, 8);
+      const topLightMat = new THREE.MeshStandardMaterial({
+        color: 0xffffcc,
+        emissive: 0xffaa44,
+        emissiveIntensity: 1.0,
+      });
+      const topLight = new THREE.Mesh(topLightGeom, topLightMat);
+      topLight.position.set(x, deckHeight + poleHeight + 0.15, z);
+      speakerGroup.add(topLight);
+      this.flashPanelLights.push(topLight);
+      
+      // Add point light for glow
+      const pointLight = new THREE.PointLight(0xffaa44, 0.4, 6, 2);
+      pointLight.position.set(x, deckHeight + poleHeight + 0.2, z);
+      speakerGroup.add(pointLight);
+      this.flashPanelPointLights.push(pointLight);
+    }
+    
+    this.surroundingGroup!.add(speakerGroup);
+  }
+  
+  /**
    * Create decorative light columns along the radial dividers
    * Each column has multiple bulbs that animate sequentially
    */
@@ -2003,7 +2712,7 @@ export class RenderingEngine {
     
     // Update windmill group
     if (this.windmillGroup) {
-      this.windmillGroup.position.set(centerWorldX, centerWorldZ + 0.5, centerWorldY);
+      this.windmillGroup.position.set(centerWorldX, centerWorldZ + this.PLATFORM_BASE_HEIGHT + 0.5, centerWorldY);
       
       const discNormal = new THREE.Vector3(
         Math.sin(tiltAngle) * Math.cos(state.platformPhase),
@@ -2187,6 +2896,22 @@ export class RenderingEngine {
     for (const light of this.rideLights) {
       light.visible = enabled;
     }
+    
+    // Flash panel lights
+    for (const bulb of this.flashPanelLights) {
+      const material = bulb.material as THREE.MeshStandardMaterial;
+      if (enabled) {
+        material.emissiveIntensity = 0.8;
+      } else {
+        material.emissiveIntensity = 0;
+        material.color.setHex(0x666666);
+      }
+    }
+    
+    // Flash panel point lights
+    for (const light of this.flashPanelPointLights) {
+      light.visible = enabled;
+    }
   }
   
   /**
@@ -2288,6 +3013,12 @@ export class RenderingEngine {
       light.dispose();
     });
     
+    // Dispose flash panel lights
+    this.flashPanelPointLights.forEach(light => {
+      this.scene.remove(light);
+      light.dispose();
+    });
+    
     // Dispose fork arm
     if (this.forkArmGroup) {
       this.forkArmGroup.traverse((child) => {
@@ -2299,6 +3030,19 @@ export class RenderingEngine {
         }
       });
       this.scene.remove(this.forkArmGroup);
+    }
+    
+    // Dispose surrounding structure
+    if (this.surroundingGroup) {
+      this.surroundingGroup.traverse((child) => {
+        if (child instanceof THREE.Mesh) {
+          child.geometry.dispose();
+          if (child.material instanceof THREE.Material) {
+            child.material.dispose();
+          }
+        }
+      });
+      this.scene.remove(this.surroundingGroup);
     }
     
     this.controls.dispose();
