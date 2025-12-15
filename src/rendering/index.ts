@@ -232,9 +232,9 @@ export class RenderingEngine {
   private createMaterials(): MaterialSet {
     return {
       platform: new THREE.MeshStandardMaterial({
-        color: 0x1a1a1a,  // Darker black for better reflections
-        metalness: 0.95,  // High metalness for mirror-like reflections
-        roughness: 0.15,  // Very smooth for sharp reflections
+        color: 0x0a0a0a,  // Very dark black for mirror-like reflections
+        metalness: 1.0,   // Maximum metalness for perfect reflections
+        roughness: 0.02,  // Near-perfect smoothness for sharp reflections
       }),
       mast: new THREE.MeshStandardMaterial({
         color: 0x666666,
@@ -326,22 +326,22 @@ export class RenderingEngine {
       }),
       flashPanelPink: new THREE.MeshStandardMaterial({
         color: 0xff69b4,  // Hot pink
-        metalness: 0.7,   // Higher metalness for light reflections
-        roughness: 0.2,   // Smoother for better reflections
+        metalness: 1.0,   // Maximum metalness for mirror-like reflections
+        roughness: 0.02,  // Near-perfect smoothness for sharp reflections
         emissive: 0xff69b4,
-        emissiveIntensity: 0.08,
+        emissiveIntensity: 0.1,
       }),
       flashPanelGold: new THREE.MeshStandardMaterial({
         color: 0xffcc00,  // Gold
-        metalness: 0.85,  // Very metallic for golden shine
-        roughness: 0.15,  // Smooth for reflections
+        metalness: 1.0,   // Maximum metalness for golden shine
+        roughness: 0.02,  // Near-perfect smoothness for reflections
         emissive: 0xffaa00,
         emissiveIntensity: 0.15,
       }),
       flashPanelWhite: new THREE.MeshStandardMaterial({
-        color: 0xfff5ee,  // Seashell white with warm tint
-        metalness: 0.5,   // More reflective
-        roughness: 0.25,  // Smoother
+        color: 0xffffff,  // Pure white for maximum reflection
+        metalness: 1.0,   // Maximum reflectivity
+        roughness: 0.02,  // Near-perfect smoothness
         emissive: 0xffeedd,
         emissiveIntensity: 0.05,
       }),
