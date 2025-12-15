@@ -640,10 +640,29 @@ export class RenderingEngine {
     const platCenterWorldY = centerZ_plat + 0.5;  // Y in world is Z in platform coords + base height
     const platCenterWorldZ = centerX_plat * Math.sin(platformPhase) + centerY_plat * Math.cos(platformPhase);
     
-    // Vector from pivot to platform center
-    const dx = platCenterWorldX - pivotWorldX;
-    const dy = platCenterWorldY - pivotWorldY;
-    const dz = platCenterWorldZ - pivotWorldZ;
+    // Skirt cone parameters (must match createSkirt)
+    const skirtInnerHeight = 2.5;
+    const skirtThickness = 0.4;
+    const skirtBottomCenterLocalZ = skirtInnerHeight - skirtThickness;  // 2.1 in windmill local Z
+    
+    // Calculate the actual attachment point at the bottom of the conical skirt
+    // The skirt bottom center is offset from the windmill center along the tilt direction
+    const attachOffsetFromCenter = skirtBottomCenterLocalZ;
+    
+    // The disc normal direction
+    const discNormalX = Math.sin(tiltAngle) * Math.cos(platformPhase);
+    const discNormalY = Math.cos(tiltAngle);
+    const discNormalZ = Math.sin(tiltAngle) * Math.sin(platformPhase);
+    
+    // Attachment point: windmill center + offset along disc normal toward the skirt bottom
+    const skirtAttachX = platCenterWorldX + discNormalX * attachOffsetFromCenter;
+    const skirtAttachY = platCenterWorldY + discNormalY * attachOffsetFromCenter;
+    const skirtAttachZ = platCenterWorldZ + discNormalZ * attachOffsetFromCenter;
+    
+    // Vector from pivot to skirt attachment point
+    const dx = skirtAttachX - pivotWorldX;
+    const dy = skirtAttachY - pivotWorldY;
+    const dz = skirtAttachZ - pivotWorldZ;
     const fullLength = Math.sqrt(dx * dx + dy * dy + dz * dz);
     
     // Direction vector (normalized)
@@ -660,10 +679,10 @@ export class RenderingEngine {
     // Adjusted arm length (shorter due to inset)
     const armLength = fullLength - pivotInset;
     
-    // Midpoint of the arm (between inset start and platform center)
-    const midX = (forkStartX + platCenterWorldX) / 2;
-    const midY = (forkStartY + platCenterWorldY) / 2;
-    const midZ = (forkStartZ + platCenterWorldZ) / 2;
+    // Midpoint of the arm (between inset start and skirt attachment point)
+    const midX = (forkStartX + skirtAttachX) / 2;
+    const midY = (forkStartY + skirtAttachY) / 2;
+    const midZ = (forkStartZ + skirtAttachZ) / 2;
     
     // Get the arm beam mesh and update it
     const armMesh = this.forkArmGroup.getObjectByName('forkArmBeam') as THREE.Mesh;
@@ -697,25 +716,50 @@ export class RenderingEngine {
       pivotCap.quaternion.copy(capQuat);
     }
     
-    // Position platform cap at secondary platform center
+    // Position platform cap at skirt attachment point
+    // Account for the skirt's conical underside angle
     const platCap = this.forkArmGroup.getObjectByName('platCap') as THREE.Mesh;
     if (platCap) {
-      platCap.position.set(platCenterWorldX, platCenterWorldY, platCenterWorldZ);
-      // Orient along arm direction (pointing into platform)
-      const armDir = new THREE.Vector3(dirX, dirY, dirZ);
-      const platCapQuat = new THREE.Quaternion();
-      platCapQuat.setFromUnitVectors(new THREE.Vector3(0, 1, 0), armDir);
-      platCap.quaternion.copy(platCapQuat);
+      // Position at the skirt attachment point
+      platCap.position.set(skirtAttachX, skirtAttachY, skirtAttachZ);
+      
+      // Skirt cone parameters for angle calculation
+      const skirtInnerRadius = 1.8;
+      const skirtOuterHeight = 0.0;
+      
+      // Calculate cone slope angle (from horizontal)
+      const coneRise = skirtInnerHeight - skirtOuterHeight;  // 2.5
+      const coneRun = this.windmillRadius - skirtInnerRadius;  // e.g., 8 - 1.8 = 6.2
+      const coneAngle = Math.atan2(coneRise, coneRun);  // Angle of cone surface from horizontal
+      
+      // The disc normal in world coords
+      const discNormal = new THREE.Vector3(discNormalX, discNormalY, discNormalZ);
+      
+      // Create a quaternion that orients the cap along the disc normal
+      const capQuat = new THREE.Quaternion();
+      capQuat.setFromUnitVectors(new THREE.Vector3(0, 1, 0), discNormal);
+      
+      // Apply additional rotation for cone angle around the radial direction
+      // This tilts the cap to match the cone slope
+      const radialDir = new THREE.Vector3(
+        Math.cos(platformPhase),
+        0,
+        Math.sin(platformPhase)
+      );
+      const coneRotation = new THREE.Quaternion();
+      coneRotation.setFromAxisAngle(radialDir, -coneAngle);  // Negative to tilt toward center
+      
+      platCap.quaternion.copy(coneRotation).multiply(capQuat);
     }
     
-    // Position ribs along the arm (from inset start to platform center)
+    // Position ribs along the arm (from inset start to skirt attachment point)
     for (let i = 0; i < 3; i++) {
       const rib = this.forkArmGroup.getObjectByName(`rib${i}`) as THREE.Mesh;
       if (rib) {
         const t = 0.25 + (i * 0.25);  // Position at 25%, 50%, 75% along arm
-        const ribX = forkStartX + (platCenterWorldX - forkStartX) * t;
-        const ribY = forkStartY + (platCenterWorldY - forkStartY) * t;
-        const ribZ = forkStartZ + (platCenterWorldZ - forkStartZ) * t;
+        const ribX = forkStartX + (skirtAttachX - forkStartX) * t;
+        const ribY = forkStartY + (skirtAttachY - forkStartY) * t;
+        const ribZ = forkStartZ + (skirtAttachZ - forkStartZ) * t;
         rib.position.set(ribX, ribY, ribZ);
         
         // Orient rib perpendicular to arm
