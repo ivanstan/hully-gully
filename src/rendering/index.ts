@@ -94,6 +94,25 @@ export class RenderingEngine {
   private flashPanelLights: THREE.Mesh[] = [];  // Light bulbs on flash panels
   private flashPanelPointLights: THREE.PointLight[] = [];  // Point lights for glow
   
+  // Light show reflectors on poles
+  private lightShowEnabled: boolean = true;
+  private poleReflectors: { 
+    mesh: THREE.Mesh; 
+    light: THREE.SpotLight; 
+    beam: THREE.Mesh;  // Visible light beam cone
+    color: number;
+  }[] = [];
+  private poleReflectorColors: number[] = [
+    0xff0066,  // Hot pink
+    0x00ff66,  // Green
+    0x6600ff,  // Purple
+    0xff6600,  // Orange
+    0x00ccff,  // Cyan
+    0xffff00,  // Yellow
+    0xff00ff,  // Magenta
+    0x00ffff,  // Aqua
+  ];
+  
   // Legacy compatibility
   private platformMesh: THREE.Mesh | null = null;
   
@@ -213,9 +232,9 @@ export class RenderingEngine {
   private createMaterials(): MaterialSet {
     return {
       platform: new THREE.MeshStandardMaterial({
-        color: 0x444444,
-        metalness: 0.7,
-        roughness: 0.4,
+        color: 0x1a1a1a,  // Darker black for better reflections
+        metalness: 0.95,  // High metalness for mirror-like reflections
+        roughness: 0.15,  // Very smooth for sharp reflections
       }),
       mast: new THREE.MeshStandardMaterial({
         color: 0x666666,
@@ -307,22 +326,22 @@ export class RenderingEngine {
       }),
       flashPanelPink: new THREE.MeshStandardMaterial({
         color: 0xff69b4,  // Hot pink
-        metalness: 0.2,
-        roughness: 0.4,
+        metalness: 0.7,   // Higher metalness for light reflections
+        roughness: 0.2,   // Smoother for better reflections
         emissive: 0xff69b4,
         emissiveIntensity: 0.08,
       }),
       flashPanelGold: new THREE.MeshStandardMaterial({
         color: 0xffcc00,  // Gold
-        metalness: 0.6,
-        roughness: 0.3,
+        metalness: 0.85,  // Very metallic for golden shine
+        roughness: 0.15,  // Smooth for reflections
         emissive: 0xffaa00,
         emissiveIntensity: 0.15,
       }),
       flashPanelWhite: new THREE.MeshStandardMaterial({
         color: 0xfff5ee,  // Seashell white with warm tint
-        metalness: 0.15,
-        roughness: 0.5,
+        metalness: 0.5,   // More reflective
+        roughness: 0.25,  // Smoother
         emissive: 0xffeedd,
         emissiveIntensity: 0.05,
       }),
@@ -769,6 +788,7 @@ export class RenderingEngine {
       // Turn off all decorative lights during day
       this.setLightsEnabled(false);
       this.setUnderskirtLightsEnabled(false);
+      this.setLightShowEnabled(false);
     }
     
     // Recreate environment map for reflections
@@ -2300,6 +2320,109 @@ export class RenderingEngine {
       pointLight.position.set(x, deckHeight + poleHeight + 0.2, z);
       speakerGroup.add(pointLight);
       this.flashPanelPointLights.push(pointLight);
+      
+      // Create two reflector lights per pole pointing at the platform
+      const reflectorMountHeight = deckHeight + poleHeight * 0.6;
+      const reflectorColors = [
+        this.poleReflectorColors[speakerAngles.indexOf(angle) * 2],
+        this.poleReflectorColors[speakerAngles.indexOf(angle) * 2 + 1]
+      ];
+      
+      for (let r = 0; r < 2; r++) {
+        const reflectorColor = reflectorColors[r];
+        const reflectorOffsetAngle = (r === 0 ? 0.15 : -0.15);  // Slight angle offset for each reflector
+        const reflectorY = reflectorMountHeight + (r === 0 ? 0.3 : -0.3);  // Vertical offset
+        
+        // Calculate position
+        const reflectorX = x - Math.cos(angle) * 0.2;
+        const reflectorZ = z - Math.sin(angle) * 0.2;
+        
+        // Reflector housing (cylindrical lamp housing)
+        const housingGeom = new THREE.CylinderGeometry(0.15, 0.2, 0.35, 12);
+        const housingMat = new THREE.MeshStandardMaterial({
+          color: 0x111111,
+          metalness: 0.9,
+          roughness: 0.2
+        });
+        const housing = new THREE.Mesh(housingGeom, housingMat);
+        housing.position.set(reflectorX, reflectorY, reflectorZ);
+        // Point housing toward center
+        housing.lookAt(0, 2, 0);
+        housing.rotateX(Math.PI / 2);
+        speakerGroup.add(housing);
+        
+        // Reflector lens (glowing part)
+        const lensGeom = new THREE.CircleGeometry(0.1, 16);
+        const lensMat = new THREE.MeshStandardMaterial({
+          color: reflectorColor,
+          emissive: reflectorColor,
+          emissiveIntensity: 2.0,  // Moderate glow
+          side: THREE.DoubleSide
+        });
+        const lens = new THREE.Mesh(lensGeom, lensMat);
+        const lensX = x - Math.cos(angle) * 0.05;
+        const lensZ = z - Math.sin(angle) * 0.05;
+        lens.position.set(lensX, reflectorY, lensZ);
+        lens.lookAt(0, 2, 0);
+        speakerGroup.add(lens);
+        
+        // Calculate beam length (distance to platform center)
+        const distToCenter = Math.sqrt(lensX * lensX + lensZ * lensZ);
+        const beamLength = distToCenter * 0.75;  // Beam reaches toward center
+        
+        // Create visible light beam cone (narrow at source, wide at target)
+        // Using CylinderGeometry: (radiusTop, radiusBottom, height)
+        // After lookAt + rotateX, the "top" points toward target, so:
+        // radiusTop = large (at platform/target), radiusBottom = small (at reflector)
+        const beamGeom = new THREE.CylinderGeometry(1.8, 0.08, beamLength, 12, 1, true);
+        const beamMat = new THREE.MeshBasicMaterial({
+          color: reflectorColor,
+          transparent: true,
+          opacity: 0.04,  // Very subtle - much more transparent
+          side: THREE.DoubleSide,
+          blending: THREE.AdditiveBlending,  // Additive for glow effect
+          depthWrite: false  // Prevent z-fighting
+        });
+        const beam = new THREE.Mesh(beamGeom, beamMat);
+        
+        // Calculate target position on the skirt/platform
+        const targetPos = new THREE.Vector3(0, 2.5, 0);
+        
+        // Calculate midpoint between lens and target for beam position
+        const midX = (lensX + targetPos.x) / 2;
+        const midY = (reflectorY + targetPos.y) / 2;
+        const midZ = (lensZ + targetPos.z) / 2;
+        
+        beam.position.set(midX, midY, midZ);
+        
+        // Point beam toward platform center
+        beam.lookAt(targetPos);
+        beam.rotateX(Math.PI / 2);  // Align cylinder axis with beam direction
+        
+        speakerGroup.add(beam);
+        
+        // SpotLight for actual lighting effect - moderate intensity
+        const spotLight = new THREE.SpotLight(
+          reflectorColor, 
+          15,           // Moderate intensity (reduced from 50)
+          30,           // Good distance
+          Math.PI / 10, // Narrower angle for focused beam
+          0.4,          // Soft penumbra
+          1.0           // Normal decay
+        );
+        spotLight.position.set(lensX, reflectorY, lensZ);
+        spotLight.target.position.set(0, 2, 0);
+        speakerGroup.add(spotLight);
+        speakerGroup.add(spotLight.target);
+        
+        // Store reference for animation
+        this.poleReflectors.push({
+          mesh: lens,
+          light: spotLight,
+          beam: beam,
+          color: reflectorColor
+        });
+      }
     }
     
     this.surroundingGroup!.add(speakerGroup);
@@ -3015,6 +3138,63 @@ export class RenderingEngine {
       }
     }
     
+    // Animate light show reflectors - sequential on/off pattern with visible beams
+    if (this.lightShowEnabled && this.poleReflectors.length > 0) {
+      const time = state.time;
+      const numReflectors = this.poleReflectors.length;
+      const sequenceSpeed = 0.8;  // Speed of the sequence (moderate pace)
+      const onDuration = 0.5;  // How long each light stays on (0-1 fraction of cycle)
+      
+      for (let i = 0; i < numReflectors; i++) {
+        const reflector = this.poleReflectors[i];
+        const lensMaterial = reflector.mesh.material as THREE.MeshStandardMaterial;
+        const beamMaterial = reflector.beam.material as THREE.MeshBasicMaterial;
+        
+        // Calculate phase offset for each reflector (creates sequential pattern)
+        const phaseOffset = i / numReflectors;
+        
+        // Calculate current phase in the cycle (0 to 1)
+        const cyclePhase = ((time * sequenceSpeed + phaseOffset) % 1);
+        
+        // Smooth transition using sine wave for fade in/out
+        let intensity: number;
+        if (cyclePhase < onDuration) {
+          // Calculate smooth fade in/out within the on duration
+          const onPhase = cyclePhase / onDuration;  // 0 to 1 during on time
+          intensity = Math.sin(onPhase * Math.PI);  // Smooth bell curve
+        } else {
+          intensity = 0;
+        }
+        
+        // Subtle pulsing effect when on
+        const flickerIntensity = intensity > 0.1 
+          ? intensity * (0.9 + Math.sin(time * 10 + i * 2) * 0.1)
+          : intensity;
+        
+        // Update lens glow - moderate brightness
+        lensMaterial.emissiveIntensity = 1.0 + flickerIntensity * 3.0;
+        
+        // Update spotlight intensity - moderate when on
+        reflector.light.intensity = 2 + flickerIntensity * 20;
+        reflector.light.visible = true;
+        
+        // Update beam visibility and opacity - subtle beams
+        beamMaterial.opacity = 0.01 + flickerIntensity * 0.08;  // Very subtle beam
+        reflector.beam.visible = true;
+      }
+    } else if (!this.lightShowEnabled) {
+      // Light show disabled - turn off all reflectors and beams
+      for (const reflector of this.poleReflectors) {
+        const lensMaterial = reflector.mesh.material as THREE.MeshStandardMaterial;
+        const beamMaterial = reflector.beam.material as THREE.MeshBasicMaterial;
+        lensMaterial.emissiveIntensity = 0.3;  // Dim glow when off
+        reflector.light.visible = false;
+        reflector.light.intensity = 0;
+        beamMaterial.opacity = 0;
+        reflector.beam.visible = false;
+      }
+    }
+    
     // Update camera position when in cabin mode (passenger view)
     if (this.cameraMode === 'cabin' && state.cabins.length > 0) {
       this.updateCabinCamera(state);
@@ -3222,6 +3402,46 @@ export class RenderingEngine {
    */
   getUnderskirtLightsEnabled(): boolean {
     return this.underskirtLightsEnabled;
+  }
+  
+  /**
+   * Set light show on/off
+   * Controls the reflector lights on poles that point at the platform
+   */
+  setLightShowEnabled(enabled: boolean): void {
+    this.lightShowEnabled = enabled;
+    
+    // Update reflector visibility immediately
+    for (const reflector of this.poleReflectors) {
+      const lensMaterial = reflector.mesh.material as THREE.MeshStandardMaterial;
+      const beamMaterial = reflector.beam.material as THREE.MeshBasicMaterial;
+      if (enabled) {
+        lensMaterial.emissiveIntensity = 1.5;
+        reflector.light.visible = true;
+        reflector.beam.visible = true;
+        beamMaterial.opacity = 0.04;
+      } else {
+        lensMaterial.emissiveIntensity = 0.3;
+        reflector.light.visible = false;
+        reflector.light.intensity = 0;
+        reflector.beam.visible = false;
+        beamMaterial.opacity = 0;
+      }
+    }
+  }
+  
+  /**
+   * Toggle light show on/off
+   */
+  toggleLightShow(): void {
+    this.setLightShowEnabled(!this.lightShowEnabled);
+  }
+  
+  /**
+   * Get light show enabled state
+   */
+  getLightShowEnabled(): boolean {
+    return this.lightShowEnabled;
   }
   
   /**

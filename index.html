@@ -1232,6 +1232,13 @@
                 <span class="toggle-slider"></span>
             </label>
         </div>
+        <div class="option-row">
+            <label for="light-show-toggle">💡 Light Show</label>
+            <label class="toggle-switch">
+                <input type="checkbox" id="light-show-toggle" checked>
+                <span class="toggle-slider"></span>
+            </label>
+        </div>
         
         <!-- Air Horn Section -->
         <div class="air-horn-section">
@@ -1385,6 +1392,11 @@
                             if (isDay) {
                                 if (lightsToggle) lightsToggle.checked = false;
                                 if (underskirtLightsToggle) underskirtLightsToggle.checked = false;
+                                const lightShowToggle = document.getElementById('light-show-toggle');
+                                if (lightShowToggle) {
+                                    lightShowToggle.checked = false;
+                                    window.simulator.getRendering().setLightShowEnabled(false);
+                                }
                             }
                         }
                     });
@@ -1402,6 +1414,16 @@
                     underskirtLightsToggle.addEventListener('change', (e) => {
                         if (window.simulator) {
                             window.simulator.getRendering().setUnderskirtLightsEnabled(e.target.checked);
+                        }
+                    });
+                }
+                
+                // Light Show toggle
+                const lightShowToggle = document.getElementById('light-show-toggle');
+                if (lightShowToggle) {
+                    lightShowToggle.addEventListener('change', (e) => {
+                        if (window.simulator) {
+                            window.simulator.getRendering().setLightShowEnabled(e.target.checked);
                         }
                     });
                 }
