@@ -2388,12 +2388,20 @@ export class RenderingEngine {
         // Calculate target position on the skirt/platform
         const targetPos = new THREE.Vector3(0, 2.5, 0);
         
-        // Calculate midpoint between lens and target for beam position
-        const midX = (lensX + targetPos.x) / 2;
-        const midY = (reflectorY + targetPos.y) / 2;
-        const midZ = (lensZ + targetPos.z) / 2;
+        // Calculate beam direction vector
+        const beamDir = new THREE.Vector3(
+          targetPos.x - lensX,
+          targetPos.y - reflectorY,
+          targetPos.z - lensZ
+        ).normalize();
         
-        beam.position.set(midX, midY, midZ);
+        // Position beam so the narrow end starts at the lens
+        // Cylinder is centered, so offset by half the beam length along beam direction
+        beam.position.set(
+          lensX + beamDir.x * (beamLength / 2),
+          reflectorY + beamDir.y * (beamLength / 2),
+          lensZ + beamDir.z * (beamLength / 2)
+        );
         
         // Point beam toward platform center
         beam.lookAt(targetPos);
