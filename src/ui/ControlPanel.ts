@@ -28,23 +28,23 @@ export class ControlPanel {
   private callbacks: ControlPanelCallbacks;
   
   // Platform controls
-  private platformSpeedInput: HTMLInputElement;
-  private platformDirectionCW: HTMLButtonElement;
-  private platformDirectionCCW: HTMLButtonElement;
+  private platformSpeedInput!: HTMLInputElement;
+  private platformDirectionCW!: HTMLButtonElement;
+  private platformDirectionCCW!: HTMLButtonElement;
   
   // Windmill controls
-  private windmillSpeedInput: HTMLInputElement;
-  private windmillDirectionCW: HTMLButtonElement;
-  private windmillDirectionCCW: HTMLButtonElement;
+  private windmillSpeedInput!: HTMLInputElement;
+  private windmillDirectionCW!: HTMLButtonElement;
+  private windmillDirectionCCW!: HTMLButtonElement;
   
   // Tilt angle controls
-  private tiltInput: HTMLInputElement;
-  private tiltUpButton: HTMLButtonElement;
-  private tiltDownButton: HTMLButtonElement;
+  private tiltInput!: HTMLInputElement;
+  private tiltUpButton!: HTMLButtonElement;
+  private tiltDownButton!: HTMLButtonElement;
   
   // System controls
-  private emergencyStopButton: HTMLButtonElement;
-  private resetButton: HTMLButtonElement;
+  private emergencyStopButton!: HTMLButtonElement;
+  private resetButton!: HTMLButtonElement;
   
   // Current state
   private currentPlatformDirection: RotationDirection = RotationDirection.COUNTER_CLOCKWISE;
@@ -419,6 +419,7 @@ export class ControlPanel {
     }
   }
 }
+
 
 
 
